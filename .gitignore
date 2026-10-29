@@ -5,6 +5,7 @@ Thumbs.db
 # Environment and Secrets
 .env
 .env.*
+!.env.example
 *.local
 
 # Node & Frontend
