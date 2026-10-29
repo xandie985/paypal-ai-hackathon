@@ -57,3 +57,4 @@ htmlcov/
 # Hackathon Scratch & Logs
 *.log
 scratch/
+*.db
