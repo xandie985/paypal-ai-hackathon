@@ -32,6 +32,7 @@ paypal-ai-hackathon/
     ├── 06-idea-ranking.md                     # 8-criteria scoring matrix & ranking table
     ├── 07-top-3-recommendations.md            # Detailed briefs for PactGuard, AegisPay, ChronoPay
     ├── 08-final-recommendation-and-roadmap.md # Strategic choice, 36h sprint plan & demo script
+    ├── 09-implementation-framework.md         # Unified full loop: stage→code map, guard matrix, readiness
     └── full-research-dossier.md               # Complete consolidated single-file dossier
 ```
 
@@ -61,9 +62,29 @@ By building **PactGuard AI**, we target the maximum allowable winning footprint 
 * **Backend:** Python 3.11+, FastAPI, Uvicorn, SQLite/PostgreSQL
 * **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
 * **Fintech & Payment Rails:** `@paypal/agent-toolkit` (TypeScript/Python), PayPal Orders v2 REST API, PayPal Invoicing v2 REST API, PayPal Payouts API, PayPal Webhooks
-* **AI & Agent Orchestration:** OpenAI API (`gpt-4o`, `gpt-4o-mini`) / Anthropic Claude (`claude-3-5-sonnet`), Model Context Protocol (MCP), LangChain / custom async event loops
+* **AI & Agent Orchestration:** Anthropic Claude (`claude-opus-5-5`, optional — money decisions stay deterministic), Model Context Protocol (MCP), LangChain / custom async event loops
 * **Sponsor Frameworks:** AG Studio (`@ag-grid-enterprise/all-modules` + Studio Agent Framework), Channel3 API/MCP, APIMatic Context Plugins
 * **Deployment & Cloud:** Render (Web Service + Render Workflows)
+
+---
+
+## 🧩 Implementation (backend/)
+
+The unified loop (**Delegate → Buy → Pay → Deliver → Pay out → Defend → Learn**) is implemented as ten stage modules sharing a hash-chained evidence ledger, a lineage ID, gate tokens and penny-exact money. See [`docs/09-implementation-framework.md`](docs/09-implementation-framework.md).
+
+```bash
+make setup
+```
+
+```bash
+make test
+```
+
+```bash
+make backend
+```
+
+`REPLAY_MODE=true` (the default) runs the whole demo arc offline; `POST /api/demo/run` returns the timeline.
 
 ---
 

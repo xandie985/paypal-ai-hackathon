@@ -5,6 +5,7 @@ Thumbs.db
 # Environment and Secrets
 .env
 .env.*
+!.env.example
 *.local
 
 # Node & Frontend
@@ -56,3 +57,4 @@ htmlcov/
 # Hackathon Scratch & Logs
 *.log
 scratch/
+*.db
