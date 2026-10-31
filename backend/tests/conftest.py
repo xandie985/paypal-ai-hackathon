@@ -1,3 +1,7 @@
+import os
+
+os.environ["REPLAY_MODE"] = "true"  # tests never touch the sandbox, whatever .env says
+
 from decimal import Decimal
 
 import pytest
