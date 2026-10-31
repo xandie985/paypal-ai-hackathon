@@ -2,7 +2,7 @@
 
 This is the engineering companion to the strategy docs (01–08). It turns the five ideas into **one closed loop** and maps every stage, hand-off guard and demo moment to code and a test that already exist in `backend/`.
 
-> **Status (2026-10-29):** All ten stages are implemented as a backend skeleton. The full demo arc runs end-to-end in **replay mode** (deterministic stand-ins for PayPal, Channel3 and the LLM). `29` tests pass, and each hand-off guard has its own test. The next step is to swap replay for live sandboxes. The open blockers are listed in [§7 Readiness](#7-readiness-analysis).
+> **Status (2026-10-29):** All ten stages are implemented as a backend skeleton. The full demo arc runs end-to-end in **replay mode** (deterministic stand-ins for PayPal, Channel3 and the LLM). `29` tests pass, and each hand-off guard has its own test. The next step is to swap replay for live sandboxes. The open blockers are listed in [§7 Readiness](#7-readiness-analysis). The phased plan for getting from here to submission is in [10-execution-plan.md](10-execution-plan.md).
 
 ---
 
