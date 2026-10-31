@@ -199,9 +199,12 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 | Item | State |
 |---|---|
 | `make setup` / `make test` | Done. 29 passing. |
-| Preflight script | `scripts/phase0_check.py` checks B-1, B-2, B-4, B-5, B-8 and the source list. Verified only to the point of skipping cleanly with no credentials. |
-| B-1 … B-9 accounts, dispute, wallet test | **Open. Needs the team.** |
-| Source check (arXiv IDs in doc 02, links in doc 03) | **Open.** The build sandbox cannot reach arxiv.org. Run `backend/.venv/bin/python scripts/phase0_check.py sources` from a machine with internet access. |
+| Preflight script | `scripts/phase0_check.py`. Run 2026-10-31: 0 failed. B-1 PASS, B-2 PASS (payout batch created), B-4 WARN, B-5 PASS, B-8 skipped (optional). |
+| B-1 OAuth, B-2 Payouts | **Done.** Scopes include payouts, disputes, invoicing, vault, orders. Payouts v1 needs `currency` (fixed in `s07_payout.py`). |
+| B-4 Sandbox dispute | **Open.** The disputes API answers 200 but lists 0 disputes. Stage 8 uses the replay dispute `PP-D-1001` until one exists. |
+| B-5 Channel3 | **Done.** `/v1/search` with `x-api-key` returns real products. It does not expose return terms, so live items route to human approval ("return terms hidden"). |
+| B-6 AG Studio, B-7 Render/APIMatic, B-9 saved-wallet capture | **Open.** Not checked yet. |
+| Source check (doc 02 arXiv IDs, doc 03 links) | **Done.** 36/36 resolved. StackOverflow and Hacker News block scripts, so those links count as passing on the anti-bot response. |
 
 ### ⚠️ Corrections to earlier docs
 - README / docs 07–08 list `gpt-4o` and `claude-3-5-sonnet`, which are outdated. The LLM layer now targets `claude-opus-5-5` (configurable through `LLM_MODEL`).
