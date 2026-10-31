@@ -42,20 +42,24 @@ class LiveChannel3:
         self._http = httpx.Client(base_url=base_url, timeout=15, headers={"x-api-key": api_key})
 
     def search(self, query, category, limit=10):
-        r = self._http.post("/v0/search", json={"query": query, "limit": limit})  # TODO verify path + body
+        r = self._http.post("/v1/search", json={"query": query, "limit": limit})
         r.raise_for_status()
-        return [self._to_candidate(p, category) for p in r.json()]
+        return [self._to_candidate(p, category) for p in r.json().get("products", [])]
 
     @staticmethod
     def _to_candidate(p: dict, category: str) -> ProductCandidate:
-        offer = (p.get("offers") or [{}])[0]  # TODO verify field names
+        offers = p.get("offers") or [{}]
+        offer = offers[0] if offers else {}
+        brand = (p.get("brands") or [{}])[0].get("name") if p.get("brands") else None
+        merchant = offer.get("domain") or brand or "unknown"
+        price_val = offer.get("price", {}).get("price") if offer.get("price") else p.get("price", "0")
         return ProductCandidate(
             product_id=str(p.get("id")),
             title=p.get("title", ""),
-            merchant=offer.get("merchant") or p.get("brand", "unknown"),
+            merchant=merchant,
             category=category,
-            price=Decimal(str(offer.get("price", {}).get("price", p.get("price", "0")))),
-            return_days=None,  # Channel3 may not expose return windows; firewall treats None as unknown
+            price=Decimal(str(price_val)),
+            return_days=None,  # Channel3 does not expose return windows; firewall routes to human on hidden terms
             url=offer.get("url", ""),
             source="channel3",
         )
