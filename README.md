@@ -33,6 +33,7 @@ paypal-ai-hackathon/
     ├── 07-top-3-recommendations.md            # Detailed briefs for PactGuard, AegisPay, ChronoPay
     ├── 08-final-recommendation-and-roadmap.md # Strategic choice, 36h sprint plan & demo script
     ├── 09-implementation-framework.md         # Unified full loop: stage→code map, guard matrix, readiness
+    ├── 10-execution-plan.md                   # Phased delivery: pain points → solutions, per-phase technicalities
     └── full-research-dossier.md               # Complete consolidated single-file dossier
 ```
 
@@ -93,3 +94,4 @@ make backend
 * To review the technical and academic literature foundations, see [`docs/02-literature-and-technical-landscape.md`](docs/02-literature-and-technical-landscape.md).
 * To understand real merchant and developer friction points in PayPal repos, see [`docs/03-user-pain-points-and-signals.md`](docs/03-user-pain-points-and-signals.md).
 * For the full architecture, demo script, and evaluation plan of **PactGuard AI**, see [`docs/07-top-3-recommendations.md`](docs/07-top-3-recommendations.md) and [`docs/08-final-recommendation-and-roadmap.md`](docs/08-final-recommendation-and-roadmap.md).
+* For the phased build plan (what is broken today, how we solve it, and the technical work in each phase), see [`docs/10-execution-plan.md`](docs/10-execution-plan.md).
