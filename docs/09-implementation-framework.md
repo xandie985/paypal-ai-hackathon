@@ -183,6 +183,26 @@ curl -s -X POST localhost:8000/api/demo/run
 2. **Funds flow for stage 7.** The payout releases supplier funds after verification, which implies the platform collects first (escrow-style). This is fine for the demo, but say so explicitly. A real marketplace would need PayPal's multiparty or partner onboarding.
 3. **Auto vs review-first default** (blocker B1 in the diagram). The code supports both through `Mandate.mode`. The demo uses `auto` with a $300 threshold.
 
+### 📝 Decisions recorded (Phase 0, 2026-10-31)
+
+These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They are **proposed defaults, pending team confirmation**. Change them here if the team disagrees.
+
+| ID | Decision | Status |
+|---|---|---|
+| D-1 | Stage 8 merchant: the business buys through PactGuard and resells or bills its own customers. A customer disputes, the business defends from the sealed record, and the loss counts against the supplier's trust score. | Proposed |
+| D-2 | Stage 7 funds flow: escrow-style (the platform collects first, releases after verification). The pitch says so, and notes production would use PayPal multiparty. | Proposed |
+| D-3 | Default mandate mode: `auto` with a $300 threshold. `review_first` is shown as a toggle. | Proposed |
+| D-4 | Dispute evidence: draft, then 1-click submit. Auto-submit is a mandate toggle. | Proposed |
+
+### ✅ Phase 0 status
+
+| Item | State |
+|---|---|
+| `make setup` / `make test` | Done. 29 passing. |
+| Preflight script | `scripts/phase0_check.py` checks B-1, B-2, B-4, B-5, B-8 and the source list. Verified only to the point of skipping cleanly with no credentials. |
+| B-1 … B-9 accounts, dispute, wallet test | **Open. Needs the team.** |
+| Source check (arXiv IDs in doc 02, links in doc 03) | **Open.** The build sandbox cannot reach arxiv.org. Run `backend/.venv/bin/python scripts/phase0_check.py sources` from a machine with internet access. |
+
 ### ⚠️ Corrections to earlier docs
 - README / docs 07–08 list `gpt-4o` and `claude-3-5-sonnet`, which are outdated. The LLM layer now targets `claude-opus-5-5` (configurable through `LLM_MODEL`).
 - The plan is framed as a "36-hour sprint", but the deadline is **12 Nov 2026, ~14 days away**. That leaves room to move stages 7 and 8 from mock to live. The scope cut above is the floor, not the ceiling.
