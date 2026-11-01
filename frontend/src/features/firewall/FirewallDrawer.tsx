@@ -9,7 +9,8 @@ const route = {
 export function RouteCard({ item, busy, onApprove, onReject }: { item: Item; busy: boolean; onApprove: () => void; onReject: () => void }) {
   const d = item.decision
   if (!d) return null
-  const r = route[d.route]
+  const approved = d.route === 'HUMAN_APPROVAL' && ['authorized', 'settled'].includes(item.status)
+  const r = approved ? { label: 'Approved by human ✓', cls: 'border-emerald-500 bg-emerald-50' } : route[d.route]
   return (
     <div className={`rounded-lg border-2 p-3 ${r.cls}`}>
       <div className="flex items-baseline justify-between">
@@ -35,16 +36,5 @@ export function RouteCard({ item, busy, onApprove, onReject }: { item: Item; bus
         </div>
       )}
     </div>
-  )
-}
-
-export function FirewallDrawer({ items, busy, onApprove, onReject }: { items: Item[]; busy: boolean; onApprove: (l: string) => void; onReject: (l: string) => void }) {
-  return (
-    <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="font-semibold">3 · Mandate firewall</h2>
-      {items.map((i) => (
-        <RouteCard key={i.lineage_id} item={i} busy={busy} onApprove={() => onApprove(i.lineage_id)} onReject={() => onReject(i.lineage_id)} />
-      ))}
-    </section>
   )
 }

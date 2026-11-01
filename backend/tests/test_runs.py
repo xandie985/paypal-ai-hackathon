@@ -109,3 +109,27 @@ def test_reject_closes_the_item(run):
     assert client.post(f"{base}/decisions/{mon['lineage_id']}/reject", json={"reason": "too pricey"}).status_code == 200
     assert client.post(f"{base}/orders/{mon['lineage_id']}/prepare").status_code == 409
     assert client.get(base).json()["complete"] is True
+
+
+def test_snapshot_and_events_carry_deal_metadata(run):
+    snap, items = run
+    mon = items["monitors"]
+    assert mon["offer"]["seller_id"] and mon["total"] and mon["saving"] is not None
+    assert snap["budget"] and snap["ledger_entries"] > 0
+    cam = items["webcams"]
+    assert cam["seal"]["terms_hash"] and cam["purchase_unit"]["amount"]["value"]
+    text = client.get(f"/api/runs/{snap['run_id']}/events?follow=false").text
+    events = [json.loads(line[6:]) for line in text.splitlines() if line.startswith("data: ")]
+    disc = next(e for e in events if e["event"] == "discovered")
+    assert disc["candidates"] and {"title", "merchant", "price", "allowlisted"} <= set(disc["candidates"][0])
+    neg = next(e for e in events if e["event"] == "negotiated")
+    assert any(t.get("from") == "buyer" for t in neg["transcript"])
+
+
+def test_run_ledger_endpoint_reports_chain_and_filters_by_lineage(run):
+    snap, items = run
+    base = f"/api/runs/{snap['run_id']}/ledger"
+    full = client.get(base).json()
+    assert full["chain_ok"] is True and len(full["entries"]) == snap["ledger_entries"]
+    one = client.get(base, params={"lineage": items["webcams"]["lineage_id"]}).json()
+    assert 0 < len(one["entries"]) < len(full["entries"])

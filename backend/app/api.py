@@ -129,6 +129,14 @@ async def run_events(run_id: str, follow: bool = True):
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
+@router.get("/runs/{run_id}/ledger")
+def run_ledger(run_id: str, lineage: str | None = None):
+    """This run's sealed evidence, with the chain check, so the UI can show why it can be trusted."""
+    ledger = _run(run_id).rt.ledger
+    ok, bad = ledger.verify()
+    return {"chain_ok": ok, "first_bad_seq": bad, "entries": [e.__dict__ for e in ledger.entries(lineage)]}
+
+
 @router.post("/runs/{run_id}/decisions/{lineage}/approve")
 def approve(run_id: str, lineage: str, body: Approver | None = None):
     _guarded(runs.step_approve, _run(run_id), lineage, (body or Approver()).approver)

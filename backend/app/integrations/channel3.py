@@ -61,6 +61,7 @@ class LiveChannel3:
             price=Decimal(str(price_val)),
             return_days=None,  # Channel3 does not expose return windows; firewall routes to human on hidden terms
             url=offer.get("url", ""),
+            image_url=p.get("image_url") or (p.get("images") or [{}])[0].get("url", ""),
             source="channel3",
         )
 

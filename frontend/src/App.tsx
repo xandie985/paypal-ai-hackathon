@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from './api/client'
 import { useRunSession } from './api/useRunSession'
-import { AttackButton, RetryButton } from './features/attack/Actions'
-import { FirewallDrawer } from './features/firewall/FirewallDrawer'
+import { AttackButton } from './features/attack/Actions'
+import { DealCard } from './features/deal/DealCard'
+import { LedgerPanel } from './features/ledger/LedgerPanel'
+import { MarketPanel } from './features/market/MarketPanel'
 import { MandateForm } from './features/mandate/MandateForm'
 import { NegotiationArena } from './features/negotiation/NegotiationArena'
-import { PayPalApprove } from './features/settle/PayPalApprove'
+import { SummaryStrip } from './features/summary/SummaryStrip'
 import { Timeline } from './features/timeline/Timeline'
 
 export default function App() {
@@ -26,34 +28,30 @@ export default function App() {
         {error && <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">Refused: {error}</p>}
         {run && (
           <>
+            <SummaryStrip run={run} />
+            <MarketPanel events={events} />
             <NegotiationArena events={events} />
-            <FirewallDrawer
-              items={run.items}
-              busy={busy}
-              onApprove={(l) => act((id) => api.approve(id, l))}
-              onReject={(l) => act((id) => api.reject(id, l))}
-            />
-            <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="font-semibold">4 · Settle &amp; seal</h2>
+            <section className="space-y-3">
+              <h2 className="font-semibold">4 · Deals · firewall · settlement</h2>
               {run.items.map((i) => (
-                <div key={i.lineage_id} className="flex flex-wrap items-center gap-3 text-sm">
-                  <span className="font-medium">{i.title}</span>
-                  <span className="text-xs text-slate-500">{i.status}</span>
-                  <PayPalApprove
-                    item={i}
-                    busy={busy}
-                    onPay={() =>
-                      act(async (id) => {
-                        await api.prepare(id, i.lineage_id)
-                        await api.capture(id, i.lineage_id)
-                      })
-                    }
-                  />
-                  <RetryButton runId={run.run_id} item={i} />
-                </div>
+                <DealCard
+                  key={i.lineage_id}
+                  item={i}
+                  runId={run.run_id}
+                  busy={busy}
+                  onApprove={() => act((id) => api.approve(id, i.lineage_id))}
+                  onReject={() => act((id) => api.reject(id, i.lineage_id))}
+                  onPay={() =>
+                    act(async (id) => {
+                      await api.prepare(id, i.lineage_id)
+                      await api.capture(id, i.lineage_id)
+                    })
+                  }
+                />
               ))}
             </section>
             <AttackButton runId={run.run_id} onDone={() => act(async () => {})} />
+            <LedgerPanel runId={run.run_id} entries={run.ledger_entries} />
             <Timeline events={events} />
           </>
         )}

@@ -48,6 +48,7 @@ class ProductCandidate(BaseModel):
     currency: str = "USD"
     return_days: int | None = None  # None = merchant hides return terms (blocker B2a)
     url: str = ""
+    image_url: str = ""
     source: str = "replay"
 
 

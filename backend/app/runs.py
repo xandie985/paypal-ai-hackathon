@@ -90,10 +90,21 @@ class Run:
                         "decision": i.decision,
                         "order_id": i.prep["order"]["id"] if i.prep else None,
                         "capture_id": i.capture["id"] if i.capture else None,
+                        "offer": i.offer,
+                        "baseline": i.baseline,
+                        "return_days": i.return_days,
+                        "total": i.offer.unit_price * i.offer.quantity,
+                        "saving": (i.baseline - i.offer.unit_price) * i.offer.quantity if i.baseline else None,
+                        "seal": i.prep["seal"] if i.prep else None,
+                        "purchase_unit": i.prep["purchase_unit"] if i.prep else None,
+                        "order_status": i.prep["order"].get("status") if i.prep else None,
                     }
                     for i in self.items.values()
                 ],
                 "events": len(self.events),
+                "budget": self.mandate.budget,
+                "spent": self.rt.spent(self.mandate_lineage),
+                "ledger_entries": len(self.rt.ledger.entries()),
             }
         )
 
@@ -113,7 +124,16 @@ async def step_discover_and_negotiate(run: Run, need: Need, method: str) -> Item
     rt, mlid = run.rt, run.mandate_lineage
     found = s02_discover.discover(rt.products, run.mandate, need)
     baseline = found["baseline_unit_price"]
-    run.emit("2", "discovered", category=need.category, baseline=baseline, hidden_terms=found["hidden_terms"])
+    run.emit(
+        "2",
+        "discovered",
+        category=need.category,
+        query=need.description,
+        quantity=need.quantity,
+        baseline=baseline,
+        hidden_terms=found["hidden_terms"],
+        candidates=[{**c.model_dump(mode="json"), "allowlisted": c.merchant in run.mandate.vendor_allowlist} for c in found["candidates"]],
+    )
     if method == "negotiate":
         lid = txn_lineage(mlid, need.category, "bulk")
         neg = await s02_negotiate.negotiate(lid, run.mandate, need, demo_sellers(), baseline)
@@ -124,6 +144,8 @@ async def step_discover_and_negotiate(run: Run, need: Need, method: str) -> Item
             "2",
             "negotiated",
             lineage_id=lid,
+            category=need.category,
+            transcript=neg.transcript,
             winner=w.seller_id,
             unit_price=w.unit_price,
             savings_pct=neg.savings_pct,
