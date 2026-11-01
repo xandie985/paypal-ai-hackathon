@@ -6,6 +6,8 @@ This document turns the research (docs 01–08) and the implementation framework
 2. **How we solve it.** Each problem is mapped to a mechanism, a module and a phase. The problems are grouped into clusters, and each cluster gets effort in proportion to its weight.
 3. **Phase technicalities.** For each phase: the endpoints, files, sandbox steps, tests, risks and exit criteria.
 
+The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md). It covers the design system, the screens, AG Studio details and a UI task tracker that runs alongside these phases.
+
 > **As of:** Saturday 2026-10-31. **Deadline:** Thursday 2026-11-12, 12:00 PM PST. That leaves **12 days**, and we plan to submit on **Nov 11**.
 
 ---
@@ -167,7 +169,7 @@ Expect 29 passing. If the number differs, fix it before Phase 1. Every later pha
 | B-2 | Check that Payouts is enabled on the sandbox business account | A $1 `POST /v1/payments/payouts` returns 201, not 403 |
 | B-4 | **Open a sandbox dispute now.** Buy something as the sandbox buyer, then open a dispute in the sandbox Resolution Center. | `GET /v1/customer/disputes` lists it. Note when it reaches `WAITING_FOR_SELLER_RESPONSE`. |
 | B-5 | Redeem `PAYPAL-HACKATHON-2026`. Read the Channel3 docs: path, auth header, response fields, whether return policy is exposed. | One real search returns products |
-| B-6 | Start the AG Studio trial. Record the licence key and exact package names. | A hello-world grid renders |
+| B-6 | **Done 2026-11-01.** AG Studio Pro with AI trial licence in `frontend/.env.local` (`VITE_AG_STUDIO_LICENSE`). Packages `ag-studio` and `ag-studio-react`, both 3.0.0. | `#/studio` renders run rows with the watermark hidden and no licence warning |
 | B-7 | Render and APIMatic accounts | Logged in. Context Plugin installed in the editor. |
 | B-8 | `ANTHROPIC_API_KEY` (optional) | `make_llm` returns a client |
 | **B-9 (new)** | **Can AUTO_SETTLE capture without a buyer popup?** A server-created order needs buyer approval before capture. An "auto" purchase is only truly autonomous if the buyer has saved a PayPal wallet that we can charge later (vaulting). Check whether the sandbox app supports saving a PayPal wallet. | A test order against a saved wallet captures without a popup. If it doesn't, use the fallback in §5. |
@@ -233,6 +235,8 @@ Expect 29 passing. If the number differs, fix it before Phase 1. Every later pha
 - **The negotiating sellers are simulated** supplier agents (`SellerAgent`). Channel3 supplies the real retail baseline they're measured against. We say this on screen.
 
 #### 1d. Frontend
+> UI design and the remaining Phase 1 UI tasks (UI-0 foundation, UI-1 Mission Control) are in [doc 11 §11](11-dashboard-ui-plan.md#11-phase-by-phase-ui-plan-alongside-doc-10).
+
 Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We use v6 if the sandbox app supports it, otherwise `@paypal/react-paypal-js`.
 
 | Component (`frontend/src/…`) | Shows | Backed by |
@@ -278,6 +282,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 - New `GET /api/runs/{id}/calibration` returns `calibrate()`'s `before`, `after`, `changes` and `trust`.
 
 #### 2b. UI
+> Full detail is in [doc 11](11-dashboard-ui-plan.md): data contract §8, custom widgets §9, agent layer §10, tasks UI-2.x.
+
 | Piece | Detail |
 |---|---|
 | Grid | AG Grid / AG Studio over `/api/studio/rows`. Route column colour-coded. Row click opens the lineage timeline. |
@@ -320,7 +326,7 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
   - `POST /api/disputes/{id}/submit` calls `s08_defend.submit`. The default is a human click (D-4).
 - **`INVALID_EVIDENCE_FILE` (SO #78902643).** Test the multipart shape early against the real dispute: the `input` JSON part, `file1` as `application/pdf`, size limits. `provide-evidence` is only accepted in certain dispute states, so watch the B-4 dispute's status.
 - **Optional LLM narrative.** `llm.text` drafts the `notes` field from ledger records only. The deterministic template stays as the fallback. The 2,000-character cap is already enforced.
-- **UI `features/disputes/DisputeCard.tsx`:** reason, deadline, win odds, the sealed terms hash, delivery verdict, "chain verified", missing records, and a Submit button.
+- **UI `features/disputes/DisputeCard.tsx`** (doc 11, UI-3.x): reason, deadline, win odds, the sealed terms hash, delivery verdict, "chain verified", missing records, and a Submit button.
 
 #### 3c. Pay out (pain point #7)
 - If B-2 passed, `release_payout` runs against sandbox Payouts. `sender_batch_id` is lineage-derived, and PayPal rejects a reused one, which adds a second layer of idempotency.
@@ -375,12 +381,16 @@ The output is a Markdown table pasted into the README. These numbers back up the
 #### 4d. README
 Rewrite for judges: what it is, a live URL, a 3-step local run, architecture, a sponsor-usage section per tool, the evaluation table, and what's simulated vs live.
 
+#### 4e. UI polish sweep
+No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in doc 11 §13.
+
 **Exit:** the public URL runs the arc. The evaluation table is in the README. **Feature freeze Tuesday Nov 10 at 18:00.**
 
 ---
 
 ### Phase 5: Video & submit (Tue Nov 10 – Wed Nov 11)
 
+- **Present mode:** doc 11 UI-5.1 (hotkeys, larger type, Studio in view mode).
 - **Script:** start from doc 08's 3-minute script, re-timed to the real screens. Keep the beats: hook (Issue #95) → discovery and negotiation → firewall (auto / approve / attack) → dispute defended from the seal → AG Studio → close.
 - **Recording:** record in **replay mode** so every take is identical. Cut in one clip of the real sandbox order ID and the real dispute response as proof of live integration.
 - **Devpost:** description, sponsor tools used (each matching the README), repo link, video link. Check the rules for repo visibility (the repo is private now) and video length before uploading.

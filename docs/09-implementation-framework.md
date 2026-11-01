@@ -151,7 +151,7 @@ curl -s -X POST localhost:8000/api/demo/run
 | Tier | Stage | Remaining work |
 |---|---|---|
 | **Must be real** | 1–4 | Switch `REPLAY_MODE=false` and run against PayPal sandbox. Add the JS SDK approve button. Capture after the buyer approves (see blocker B-3). Run against the live Channel3 adapter. |
-| **Must be real** | 9 | AG Studio UI: grid over `/api/studio/rows`, 3 custom widgets (savings vs baseline, firewall routes, dispute win-rate), Studio Agent NL queries. |
+| **Must be real** | 9 | AG Studio UI: grid over `/api/studio/rows`, 3 custom widgets (savings vs baseline, firewall routes, dispute win-rate), Studio Agent NL queries. Superseded by [doc 11](11-dashboard-ui-plan.md) §9–10: W1 Mandate Ruler, W2 Savings Dumbbell, W3 Lineage Chain; win rate becomes a built-in gauge. |
 | **Must be real** | UI | Negotiation arena, firewall drawer (Auto / Approval / Blocked cards + "simulate attack"), lineage timeline, dispute card. |
 | **Thin but live** | 8 | One real sandbox dispute answered with `provide-evidence` from the ledger (see blocker B-4). |
 | Mock / stretch | 5, 6, 7, 10 | Already scripted. Stretch goals: real Payouts sandbox call, real webhook endpoint with verification, LLM-written dispute narrative. |
@@ -174,7 +174,7 @@ curl -s -X POST localhost:8000/api/demo/run
 | B-3 | **Order approval flow** | A real sandbox order can't be captured until a buyer approves it. Replay auto-approves. The frontend needs the PayPal JS SDK button (`createOrder` → our `/prepare`, `onApprove` → our `/capture`). Endpoints still to add. |
 | B-4 | **Real sandbox dispute** | A sandbox dispute has to be opened from the sandbox buyer account in the Resolution Center, and evidence can only be submitted in certain dispute states. Open one **early**, since it can take time to reach a state that accepts evidence. Replay is the fallback for the video. |
 | B-5 | **Channel3 API shape** | The live adapter's path, auth header and field names are **placeholders**. `docs.trychannel3.com` was not reachable from the build sandbox. Confirm against the docs and redeem `PAYPAL-HACKATHON-2026`. Only `LiveChannel3` changes. |
-| B-6 | **AG Studio / Studio Agent Framework** | Start the trial and get the licence key and package names. Nothing AG Grid-related is installed yet. |
+| B-6 | **AG Studio / Studio Agent Framework** | **Done (2026-11-01).** The AG Studio Pro with AI trial licence (valid to 2026-12-16) is in `frontend/.env.local` as `VITE_AG_STUDIO_LICENSE`. `ag-studio` and `ag-studio-react` 3.0.0 are installed, and `#/studio` renders licensed (doc 11, UI-0.4). |
 | B-7 | **APIMatic Context Plugin, Render** | Set up accounts. These are not touched by the code yet. |
 | B-8 | **LLM key** | Optional for the demo (replay works without it). Set `ANTHROPIC_API_KEY` for LLM-drafted seller messages and dispute narratives. |
 
@@ -203,7 +203,8 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 | B-1 OAuth, B-2 Payouts | **Done.** Scopes include payouts, disputes, invoicing, vault, orders. Payouts v1 needs `currency` (fixed in `s07_payout.py`). |
 | B-4 Sandbox dispute | **Open.** The disputes API answers 200 but lists 0 disputes. Stage 8 uses the replay dispute `PP-D-1001` until one exists. |
 | B-5 Channel3 | **Done.** `/v1/search` with `x-api-key` returns real products. It does not expose return terms, so live items route to human approval ("return terms hidden"). |
-| B-6 AG Studio, B-7 Render/APIMatic, B-9 saved-wallet capture | **Open.** Not checked yet. |
+| B-6 AG Studio | **Done.** The licence validates: no watermark and no licence warning on `#/studio`. See doc 11, UI-0.4. |
+| B-7 Render/APIMatic, B-9 saved-wallet capture | **Open.** Not checked yet. |
 | Source check (doc 02 arXiv IDs, doc 03 links) | **Done.** 36/36 resolved. StackOverflow and Hacker News block scripts, so those links count as passing on the anti-bot response. |
 
 ### ⚠️ Corrections to earlier docs

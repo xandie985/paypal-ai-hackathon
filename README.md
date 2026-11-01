@@ -34,6 +34,7 @@ paypal-ai-hackathon/
     ├── 08-final-recommendation-and-roadmap.md # Strategic choice, 36h sprint plan & demo script
     ├── 09-implementation-framework.md         # Unified full loop: stage→code map, guard matrix, readiness
     ├── 10-execution-plan.md                   # Phased delivery: pain points → solutions, per-phase technicalities
+    ├── 11-dashboard-ui-plan.md                # Design system, screens, AG Studio reference, UI tasks per phase
     └── full-research-dossier.md               # Complete consolidated single-file dossier
 ```
 
@@ -95,3 +96,4 @@ make backend
 * To understand real merchant and developer friction points in PayPal repos, see [`docs/03-user-pain-points-and-signals.md`](docs/03-user-pain-points-and-signals.md).
 * For the full architecture, demo script, and evaluation plan of **PactGuard AI**, see [`docs/07-top-3-recommendations.md`](docs/07-top-3-recommendations.md) and [`docs/08-final-recommendation-and-roadmap.md`](docs/08-final-recommendation-and-roadmap.md).
 * For the phased build plan (what is broken today, how we solve it, and the technical work in each phase), see [`docs/10-execution-plan.md`](docs/10-execution-plan.md).
+* For UI and dashboard work (design tokens, Mission Control, the AG Studio Command Center, custom widgets, Studio agents, and the UI task tracker), see [`docs/11-dashboard-ui-plan.md`](docs/11-dashboard-ui-plan.md).
