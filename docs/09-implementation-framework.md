@@ -189,10 +189,11 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 
 | ID | Decision | Status |
 |---|---|---|
-| D-1 | Stage 8 merchant: the business buys through PactGuard and resells or bills its own customers. A customer disputes, the business defends from the sealed record, and the loss counts against the supplier's trust score. | Proposed |
-| D-2 | Stage 7 funds flow: escrow-style (the platform collects first, releases after verification). The pitch says so, and notes production would use PayPal multiparty. | Proposed |
-| D-3 | Default mandate mode: `auto` with a $300 threshold. `review_first` is shown as a toggle. | Proposed |
-| D-4 | Dispute evidence: draft, then 1-click submit. Auto-submit is a mandate toggle. | Proposed |
+| D-1 | Stage 8 merchant: the business buys through PactGuard and resells or bills its own customers. A customer disputes, the business defends from the sealed record, and the loss counts against the supplier's trust score. | Confirmed |
+| D-2 | Stage 7 funds flow: escrow-style (the platform collects first, releases after verification). The pitch says so, and notes production would use PayPal multiparty. | Confirmed |
+| D-3 | Default mandate mode: `auto` with a $300 threshold. `review_first` is shown as a toggle. | Confirmed |
+| D-4 | Dispute evidence: draft, then 1-click submit. Auto-submit is a mandate toggle. | Confirmed |
+| D-5 | **Cross-Border Fulfillment & Regional Shipping Governance:** Catalogs (Channel3) aggregate global/US feeds. To ensure items can physically be delivered to the buyer's country, the mandate enforces geographic routing through the vendor allowlist (e.g. EU/IT vs US domains), cross-border shipping terms evaluation in the firewall, and carrier delivery verification in Stage 5 before escrow payout release. | Confirmed |
 
 ### ✅ Phase 0 status
 
@@ -286,6 +287,17 @@ This section records the empirical experiments conducted against live external A
 * **Finding:**
   - PayPal's sandbox Resolution Center UI is currently experiencing an internal server error across all transactions (*"We're sorry, it looks like something went wrong on our end"*).
   - **Guardrail R3 Active:** Activated our planned deterministic dispute fallback (`PP-D-1001`). Stage 8 (`s08_defend.py`) successfully generated the ReportLab PDF evidence brief, verified SHA-256 hash chains from the ledger, computed win probability (95%), and constructed the multipart `provide-evidence` payload. No hackathon progress was blocked.
+
+### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
+* **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.
+* **PactGuard AI 3-Layer Governance:**
+  1. **Mandate-Level Geographic Allowlisting:** During Stage 1 delegation, the enterprise defines its destination country (`country_code`) and filters allowable vendor domains (e.g., `amazon.it`, `unieuro.it`, or verified global merchants with DDP shipping).
+  2. **Firewall Warrant & Reversibility Check (Stage 3):** If a merchant does not provide clear shipping terms or cannot fulfill to the buyer's destination country, the Mandate Firewall fails the *Warrant* / *Reversibility* factor and routes the item to `HUMAN_APPROVAL` (preventing blind, unfulfillable auto-purchases).
+  3. **Milestone Escrow Delivery Verification (Stage 5 - ChronoPay):** Payments are held in platform escrow; Stage 5 verifies international carrier tracking (FedEx, DHL, UPS) and confirmed delivery to the buyer's registered PayPal destination address before Stage 7 releases funds to the seller.
+* **Future Enhancement Roadmap (Phases 2 & 3):**
+  - Add an explicit `destination_country: str = "US"` field to the Mandate input schema.
+  - Implement dynamic merchant shipping capability lookups during Stage 2 product discovery.
+  - Expose regional shipping delivery metrics in the AG Studio FinOps dashboard.
 
 ---
 

@@ -181,6 +181,7 @@ Expect 29 passing. If the number differs, fix it before Phase 1. Every later pha
 | D-2 | How do funds flow in stage 7? | Escrow-style: the platform collects first and releases after verification. The pitch says so explicitly, and notes that production would use PayPal multiparty. |
 | D-3 | What is the default mandate mode? | `auto` with a $300 threshold. `review_first` is shown as a toggle. |
 | D-4 | Should dispute evidence auto-submit? This is doc 03's open assumption. | Default to "draft, then 1-click submit". Auto-submit is a mandate toggle. |
+| D-5 | How is geographic delivery and cross-border fulfillment governed? | 3-layer protection: mandate vendor allowlisting by country/jurisdiction (e.g. EU vs US), firewall routing to human review on unverified or hidden shipping terms, and carrier tracking verification in Stage 5 before escrow payout disbursement. |
 
 **Source check.** Open every arXiv ID in doc 02 and every GitHub, HN, Reddit and SO link in doc 03. Remove or correct anything that doesn't resolve. Only verified sources go into the video.
 
