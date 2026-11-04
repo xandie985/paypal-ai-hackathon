@@ -148,3 +148,25 @@ def test_run_ledger_endpoint_reports_chain_and_filters_by_lineage(run):
     assert full["chain_ok"] is True and len(full["entries"]) == snap["ledger_entries"]
     one = client.get(base, params={"lineage": items["webcams"]["lineage_id"]}).json()
     assert 0 < len(one["entries"]) < len(full["entries"])
+
+
+def test_studio_rows_are_scoped_to_the_requested_run(run):
+    snap, items = run
+    other = client.post("/api/runs").json()  # newer run: the fallback must not leak into run-scoped queries
+    rows = client.get("/api/studio/rows", params={"run_id": snap["run_id"]}).json()["rows"]
+    cam = next(r for r in rows if r["lineage_id"] == items["webcams"]["lineage_id"])
+    assert cam["order_id"] == items["webcams"]["order_id"] and cam["capture_id"] == items["webcams"]["capture_id"]
+    assert cam["status"] == "CAPTURED"
+    # Lineage and replay order IDs repeat across runs of the same mandate, so make the runs differ in state:
+    # settle the monitor in the requested run only, then check each run's rows reflect its own ledger.
+    base, mon = f"/api/runs/{snap['run_id']}", items["monitors"]["lineage_id"]
+    client.post(f"{base}/decisions/{mon}/approve")
+    client.post(f"{base}/orders/{mon}/prepare")
+    client.post(f"{base}/orders/{mon}/capture")
+    status = lambda rid: {r["lineage_id"]: r.get("status") for r in client.get("/api/studio/rows", params={"run_id": rid}).json()["rows"]}  # noqa: E731
+    assert status(snap["run_id"])[mon] == "CAPTURED"
+    assert status(other["run_id"]).get(mon) != "CAPTURED"
+
+
+def test_studio_rows_unknown_run_is_404():
+    assert client.get("/api/studio/rows", params={"run_id": "nope"}).status_code == 404

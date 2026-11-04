@@ -49,11 +49,13 @@ def ledger_verify():
 @router.get("/studio/rows")
 def studio_rows(run_id: str | None = None):
     """Row data for AG Grid / AG Studio widgets."""
-    target_ledger = runtime().ledger
-    if run_id and run_id in runs.RUNS:
-        target_ledger = runs.RUNS[run_id].rt.ledger
+    # An unknown run (e.g. wiped by a backend restart) is a 404, never another run's data.
+    if run_id:
+        target_ledger = _run(run_id).rt.ledger
     elif runs.RUNS:
         target_ledger = list(runs.RUNS.values())[-1].rt.ledger
+    else:
+        target_ledger = runtime().ledger
     rows = transaction_rows(target_ledger)
     return {"rows": rows, "kpis": kpis(rows)}
 
