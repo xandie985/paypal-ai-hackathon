@@ -181,3 +181,35 @@ def test_money_is_a_decimal_string_on_the_wire():
     did = open_case(run_id, mic["lineage_id"], amount="30.00")
     d = client.get(f"/api/disputes/{did}").json()
     assert d["case"]["amount"] == "30.00" and isinstance(d["assessment"]["options"][0]["ev"], str)
+
+
+def test_refund_on_return_needs_a_configured_return_address(monkeypatch):
+    """Live: PayPal rejects REFUND_WITH_RETURN without an address, so we refuse before calling, and never invent one."""
+    from app.main import settings
+
+    run_id, mic = settled("microphones")
+    did = open_case(run_id, mic["lineage_id"], amount="30.00")
+    gw = api.disputes_gateway()
+    monkeypatch.setattr(settings, "replay_mode", False)  # live rules for the address; the replay gateway stays
+    a = client.get(f"/api/disputes/{did}").json()["assessment"]
+    assert "returns address" in a["options"][1]["excluded_by"] and a["recommended"] != "refund_with_return"
+    r = client.post(f"/api/disputes/{did}/respond", json={"option": "refund_with_return", "note": "x"})
+    assert r.status_code == 409 and ("make_offer", did) not in gw.calls
+    monkeypatch.setattr(settings, "return_address_line_1", "9 Dock St")
+    monkeypatch.setattr(settings, "return_address_city", "Austin")
+    monkeypatch.setattr(settings, "return_address_postal_code", "78701")
+    assert client.post(f"/api/disputes/{did}/respond", json={"option": "refund_with_return", "note": "ok"}).status_code == 200
+    sent = gw.get_dispute(did)["offer"]["return_shipping_address"]
+    assert sent["address_line_1"] == "9 Dock St" and sent["postal_code"] == "78701"
+
+
+def test_replay_double_rejects_an_offer_without_address_like_paypal():
+    import pytest
+
+    from app.integrations.paypal import PayPalAPIError, ReplayPayPal
+
+    gw = ReplayPayPal()
+    d = gw.open_dispute(lineage_id="L", capture_id="C", amount="1.00", reason="X", note="", item_name="i")
+    with pytest.raises(PayPalAPIError) as e:
+        gw.dispute_action(d["dispute_id"], "make_offer", {"offer_type": "REFUND_WITH_RETURN", "note": "n"})
+    assert e.value.details[0]["issue"] == "MISSING_RETURN_SHIPPING_ADDRESS" and gw.calls == []

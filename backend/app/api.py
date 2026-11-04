@@ -229,7 +229,7 @@ def _case(dispute_id: str):
         raise HTTPException(404 if e.status == 404 else 502, e.to_dict()) from e
     case = s08_defend.parse_paypal_dispute(raw)
     ledger, lineage = s08_defend.locate(case, evidence_ledgers())
-    return case, ledger, lineage, s08_defend.assess(case, ledger, lineage, date.today())
+    return case, ledger, lineage, s08_defend.assess(case, ledger, lineage, date.today(), return_address_set=bool(settings.return_address))
 
 
 def _dec(obj):
@@ -313,7 +313,14 @@ def respond_dispute(dispute_id: str, body: RespondBody):
     case, ledger, _, a = _case(dispute_id)
     resp = _guarded(
         lambda: s08_defend.respond(
-            disputes_gateway(), ledger or fallback_ledger(), case, a, option=body.option, note=body.note, approver=body.approver
+            disputes_gateway(),
+            ledger or fallback_ledger(),
+            case,
+            a,
+            option=body.option,
+            note=body.note,
+            approver=body.approver,
+            return_address=settings.return_address,
         )
     )
     case2, _, _, a2 = _case(dispute_id)

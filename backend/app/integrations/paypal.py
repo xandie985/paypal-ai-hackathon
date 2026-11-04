@@ -183,6 +183,11 @@ class ReplayPayPal:
         if action == "send_message":
             d["messages"].append({"posted_by": "SELLER", "content": body["message"]})
         elif action == "make_offer":
+            if body.get("offer_type") == "REFUND_WITH_RETURN" and not body.get("return_shipping_address"):
+                self.calls.pop()  # PayPal rejects it, so nothing happened
+                raise PayPalAPIError(
+                    422, "UNPROCESSABLE_ENTITY", "return address required", details=[{"issue": "MISSING_RETURN_SHIPPING_ADDRESS"}]
+                )
             d["status"], d["offer"] = "WAITING_FOR_BUYER_RESPONSE", body
             d["links"] = [link for link in d["links"] if link["rel"] == "send_message"]
         elif action == "accept_claim":

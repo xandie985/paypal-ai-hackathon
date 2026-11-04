@@ -307,7 +307,10 @@ A PayPal dispute is answered rationally from records sealed before it existed. A
 - **Responding.** `POST /api/disputes/{id}/respond` sends `provide-evidence` (with the PDF brief), `send-message`, `make-offer` (`REFUND_WITH_RETURN`) or `accept-claim`. Each option is sent once. The ledger records the option, channel, EV, recommendation, whether it was followed, the approver and a hash of the note (not the text).
 - **LLM.** It is optional and only rewords the draft (`POST /api/disputes/{id}/draft`). Without `ANTHROPIC_API_KEY` the template is used.
 - **UI.** The Mission Control "Dispute desk" shows the case list, facts, options with EV, the recommendation, an editable draft, the PDF brief, and a "Send to PayPal" confirm. In replay it can simulate a buyer dispute on any settled item.
-- **Not verified live yet.** The `make-offer` and `accept-claim` request bodies follow PayPal's documented fields but have not been sent to the sandbox. Try them on the sandbox case before relying on them in the demo.
+- **Live findings (2026-11-05, `PP-R-EGO-10196439`).**
+  - `make-offer` with `REFUND_WITH_RETURN` needs `return_shipping_address`; without it PayPal returns `MISSING_RETURN_SHIPPING_ADDRESS`. The address now comes from `RETURN_ADDRESS_*` in `.env`. Live mode refuses the offer if it is unset; replay uses a labelled demo address.
+  - A direct schema probe of `accept-claim` was accepted (HTTP 200) and moved the case to `UNDER_REVIEW` with only `self` left in `links`. That call was made outside the desk, so the ledger has no `dispute_response` for it, and it does not count as an agent decision.
+  - The corrected `make-offer` body has **not** yet been accepted live: it needs a fresh dispute.
 
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.

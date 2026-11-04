@@ -18,6 +18,36 @@ class Settings(BaseSettings):
     # Deterministic replay of PayPal/Channel3/LLM so the demo never depends on sandbox uptime.
     replay_mode: bool = True
 
+    # Where a buyer ships a returned item (make-offer REFUND_WITH_RETURN). PayPal shows it to the buyer,
+    # so it must be your real returns address in live mode.
+    return_address_line_1: str = ""
+    return_address_city: str = ""
+    return_address_state: str = ""
+    return_address_postal_code: str = ""
+    return_address_country: str = "US"
+
+    @property
+    def return_address(self) -> dict | None:
+        """PayPal address object, or None when unset in live mode (a refund-on-return offer is then refused).
+        Replay uses an obviously fictional address so rehearsals work without configuration."""
+        if self.return_address_line_1 and self.return_address_city and self.return_address_postal_code:
+            return {
+                "address_line_1": self.return_address_line_1,
+                "admin_area_2": self.return_address_city,
+                "admin_area_1": self.return_address_state,
+                "postal_code": self.return_address_postal_code,
+                "country_code": self.return_address_country,
+            }
+        if self.replay_mode:
+            return {
+                "address_line_1": "1 Replay Returns Dock (demo)",
+                "admin_area_2": "Nowhere",
+                "admin_area_1": "CA",
+                "postal_code": "00000",
+                "country_code": "US",
+            }
+        return None
+
     @property
     def paypal_live(self) -> bool:
         return not self.replay_mode and bool(self.paypal_client_id and self.paypal_client_secret)

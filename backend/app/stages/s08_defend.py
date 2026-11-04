@@ -227,7 +227,9 @@ def classify_note(note: str) -> str:
     return "other"
 
 
-def assess(case: DisputeCase, ledger: EvidenceLedger | None, lineage_id: str | None, today: date) -> dict:
+def assess(
+    case: DisputeCase, ledger: EvidenceLedger | None, lineage_id: str | None, today: date, *, return_address_set: bool = True
+) -> dict:
     """Deterministic: facts from the sealed record, expected value per option, hard policy rules,
     and only the options PayPal currently allows. The LLM never decides; at most it rewords the draft."""
     found = bool(ledger and lineage_id and ledger.latest(lineage_id, "seal"))
@@ -286,6 +288,8 @@ def assess(case: DisputeCase, ledger: EvidenceLedger | None, lineage_id: str | N
         contest["excluded_by"] = "No sealed record for this payment: we won't contest without evidence."
     elif facts.get("within_return_window") and case.reason == "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED":
         contest["excluded_by"] = f"Inside the sealed {facts['sealed_return_days']}-day return window: honour our own terms."
+    if options[1]["via"] == "make_offer" and not return_address_set:
+        options[1]["excluded_by"] = "No returns address configured (RETURN_ADDRESS_* in .env)."
     if days_left is not None and days_left < 0:
         for o in options:
             o["excluded_by"] = o["excluded_by"] or "Seller response window has closed."
@@ -338,7 +342,15 @@ def draft_reply(case: DisputeCase, assessment: dict, option: str) -> str:
 
 
 def respond(
-    gateway: PayPalGateway, ledger: EvidenceLedger, case: DisputeCase, assessment: dict, *, option: str, note: str, approver: str
+    gateway: PayPalGateway,
+    ledger: EvidenceLedger,
+    case: DisputeCase,
+    assessment: dict,
+    *,
+    option: str,
+    note: str,
+    approver: str,
+    return_address: dict | None = None,
 ) -> dict:
     """Send the chosen response. Called only from a human's explicit approval (D-4). The option must be
     one PayPal allows right now, and each response is sent once."""
@@ -349,6 +361,9 @@ def respond(
         )
     if chosen["excluded_by"]:
         raise DisputeActionUnavailable(chosen["excluded_by"], dispute_id=case.dispute_id)
+    if chosen["via"] == "make_offer" and not return_address:
+        # PayPal rejects REFUND_WITH_RETURN without one (MISSING_RETURN_SHIPPING_ADDRESS); refuse before calling.
+        raise DisputeActionUnavailable("set RETURN_ADDRESS_* in .env before offering a refund on return", dispute_id=case.dispute_id)
     lid = assessment["lineage_id"] or f"DISPUTE-{case.dispute_id}"
     if any(
         e.payload["dispute_id"] == case.dispute_id and e.payload.get("option") == option for e in ledger.entries(lid, "dispute_response")
@@ -366,18 +381,7 @@ def respond(
     elif chosen["via"] == "send_message":
         resp = gateway.dispute_action(case.dispute_id, "send_message", {"message": note[:2000]})
     elif chosen["via"] == "make_offer":
-        body = {
-            "note": note[:2000],
-            "offer_amount": money,
-            "offer_type": "REFUND_WITH_RETURN",
-            "return_shipping_address": {
-                "address_line_1": "100 Innovation Way",
-                "admin_area_2": "San Jose",
-                "admin_area_1": "CA",
-                "postal_code": "95131",
-                "country_code": "US",
-            },
-        }
+        body = {"note": note[:2000], "offer_amount": money, "offer_type": "REFUND_WITH_RETURN", "return_shipping_address": return_address}
         resp = gateway.dispute_action(case.dispute_id, "make_offer", body)
     else:
         resp = gateway.dispute_action(case.dispute_id, "accept_claim", {"note": note[:2000]})
