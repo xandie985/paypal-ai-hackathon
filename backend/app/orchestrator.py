@@ -57,7 +57,7 @@ DEMO_MANDATE = Mandate(
     per_txn_cap=Decimal("1500"),
     vendor_allowlist=["Northwind Displays", "Contoso Retail", *LIVE_DEMO_MERCHANTS],
     allowed_categories=["monitors", "webcams", "microphones"],
-    min_return_days=30,
+    min_return_days=14,
 )
 
 VENDOR_REGISTRY = {"Northwind Displays": "payouts@northwind.example", "Contoso Retail": "ar@contoso.example"}
