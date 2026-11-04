@@ -9,6 +9,7 @@ from . import runs
 from .config import settings
 from .core.errors import GuardViolation
 from .domain.models import Mandate
+from .integrations.paypal import PayPalAPIError
 from .orchestrator import Runtime, run_demo
 from .stages.s09_observe import kpis, transaction_rows
 
@@ -77,6 +78,9 @@ def _guarded(fn, *args):
         return fn(*args)
     except GuardViolation as e:
         raise HTTPException(409, e.to_dict()) from e
+    except PayPalAPIError as e:
+        # e.g. ORDER_NOT_APPROVED if the buyer closed the popup, INSTRUMENT_DECLINED in sandbox.
+        raise HTTPException(502, e.to_dict()) from e
     except KeyError as e:
         raise HTTPException(404, f"unknown lineage {e}") from e
     except ValueError as e:

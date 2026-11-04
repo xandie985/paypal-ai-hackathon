@@ -207,6 +207,25 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 | B-7 Render/APIMatic, B-9 saved-wallet capture | **Open.** Not checked yet. |
 | Source check (doc 02 arXiv IDs, doc 03 links) | **Done.** 36/36 resolved. StackOverflow and Hacker News block scripts, so those links count as passing on the anti-bot response. |
 
+### 🔄 Phase 1 close-out (2026-11-04)
+
+| Step | State |
+|---|---|
+| 1. Return-policy table + allowlist | **Built.** `RETURN_POLICY_DAYS` in `integrations/channel3.py` covers amazon.com (30d), bestbuy.com (15d), walmart.com, target.com, newegg.com, bhphotovideo.com (30d), and ebay.com (None: each seller sets its own terms). These are standard electronics windows as published. They are labelled demo data and **must be re-checked before recording**. `DEMO_MANDATE.vendor_allowlist` = the two simulated negotiators + those domains. A third demo need (USB microphone, direct) is the deliberate "terms hidden" item: in replay it routes to a human on reversibility alone ($89, under the threshold). **Not yet confirmed against live results:** run `scripts/phase0_check.py merchants` to see which domains the demo queries actually return and which one each direct buy picks. |
+| 2. `test_live_channel3_mapping` | **Done.** `tests/test_channel3.py` + `tests/fixtures/channel3_search.json`: first offer wins, `www.`/URL domains normalized, brand fallback with no offers, `"$1,024.50"` and scalar prices, `images[]` fallback, unpriced/$0 listings dropped, allowlist coverage, discovery baseline over mapped data. |
+| 3. `PayPalApprove.tsx` | **Built.** Replay keeps the 1-click button. Live (`/api/health` → `paypal_live` + public `paypal_client_id`) renders `@paypal/react-paypal-js` `PayPalButtons`: `createOrder` → `/prepare`, `onApprove` → `/capture`, then shows the sandbox order and capture IDs. PayPal errors now return 502 with `name`/`debug_id`/`details` (e.g. `ORDER_NOT_APPROVED`) instead of a 500. The live-shaped flow is tested against a mock PayPal (`tests/test_paypal_sandbox.py`). **The real button has not been clicked yet**: the build sandbox can't reach paypal.com. |
+| 4. Live capture + B-9 | **Open. Needs a machine with sandbox access.** Runbook below. |
+
+**Step 4 runbook**
+1. In `.env`: `REPLAY_MODE=false`, PayPal and Channel3 keys set. Restart the backend (single worker).
+2. `scripts/phase0_check.py merchants`: the webcam pick should have ≥30d returns (AUTO_SETTLE), and the microphone pick should be "terms hidden". If not, adjust the query in `runs.DEMO_NEEDS` or the table.
+3. In the UI: Run agent. The header badge must say **live sandbox**. Approve the monitor card, then click the PayPal button, log in as the sandbox **personal** account and approve. The card must show a real order ID (not `ORD-REPLAY-…`) and a capture ID.
+4. Check the same order in the sandbox business account's activity, and that `custom_id` equals the lineage.
+5. B-9: `scripts/phase0_check.py b9`, approve the printed link as the sandbox buyer, then `scripts/phase0_check.py b9 <setup_token_id>`. PASS = AUTO_SETTLE can capture server-side from a saved wallet. FAIL = keep the popup for AUTO_SETTLE and say so in the pitch (doc 10 §5).
+6. `make test` with `REPLAY_MODE=true` must still pass.
+
+**Found while doing this:** the root `.gitignore` rule `lib/` (meant for Python) was ignoring `frontend/src/lib/format.ts`, so that file was never committed and a fresh clone failed `npm run build`. The rule is now anchored to `/lib/` and `backend/lib/`, and `format.ts` is committed.
+
 ### ⚠️ Corrections to earlier docs
 - README / docs 07–08 list `gpt-4o` and `claude-3-5-sonnet`, which are outdated. The LLM layer now targets `claude-opus-5-5` (configurable through `LLM_MODEL`).
 - The plan is framed as a "36-hour sprint", but the deadline is **12 Nov 2026, ~14 days away**. That leaves room to move stages 7 and 8 from mock to live. The scope cut above is the floor, not the ceiling.

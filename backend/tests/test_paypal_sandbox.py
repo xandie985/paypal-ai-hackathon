@@ -1,0 +1,119 @@
+"""SandboxPayPal against a mock PayPal (no network): request shape, idempotency header, error mapping,
+and a live-style order (CREATED until the buyer approves) through the run API."""
+
+import json
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from app import runs
+from app.integrations.paypal import PayPalAPIError, SandboxPayPal
+from app.main import app
+
+
+class FakePayPal:
+    """Just enough of api-m.sandbox.paypal.com: orders start CREATED and capture needs buyer approval."""
+
+    def __init__(self):
+        self.requests: list[httpx.Request] = []
+        self.orders: dict[str, dict] = {}
+        self.approved: set[str] = set()
+
+    def __call__(self, req: httpx.Request) -> httpx.Response:
+        self.requests.append(req)
+        path = req.url.path
+        if path == "/v1/oauth2/token":
+            return httpx.Response(200, json={"access_token": "A21-token", "expires_in": 32400})
+        if path == "/v2/checkout/orders":
+            body = json.loads(req.content)
+            oid = f"5O{len(self.orders):015d}"
+            self.orders[oid] = {"id": oid, "status": "CREATED", "purchase_units": body["purchase_units"]}
+            return httpx.Response(201, json=self.orders[oid])
+        if path.endswith("/capture"):
+            oid = path.split("/")[-2]
+            if req.headers.get("content-type") != "application/json":
+                return httpx.Response(415, json={"name": "UNSUPPORTED_MEDIA_TYPE", "message": "need json"})
+            if oid not in self.approved:
+                return httpx.Response(
+                    422,
+                    json={
+                        "name": "UNPROCESSABLE_ENTITY",
+                        "message": "not approved",
+                        "debug_id": "dbg123",
+                        "details": [{"issue": "ORDER_NOT_APPROVED"}],
+                    },
+                )
+            pu = self.orders[oid]["purchase_units"][0]
+            cap = {"id": "CAP" + oid[-6:], "status": "COMPLETED", "amount": {k: pu["amount"][k] for k in ("currency_code", "value")}}
+            return httpx.Response(201, json={"id": oid, "status": "COMPLETED", "purchase_units": [{"payments": {"captures": [cap]}}]})
+        return httpx.Response(404, json={"name": "RESOURCE_NOT_FOUND", "message": path})
+
+
+def sandbox(fake: FakePayPal) -> SandboxPayPal:
+    gw = SandboxPayPal("cid", "secret", "https://api-m.sandbox.paypal.com")
+    gw._http = httpx.Client(base_url="https://api-m.sandbox.paypal.com", transport=httpx.MockTransport(fake))
+    return gw
+
+
+def test_capture_sends_json_content_type_and_request_id():
+    fake = FakePayPal()
+    gw = sandbox(fake)
+    order = gw.create_order({"amount": {"currency_code": "USD", "value": "10.00"}}, "s4-create-abc")
+    assert order["status"] == "CREATED"
+    fake.approved.add(order["id"])
+    cap = gw.capture_order(order["id"], "s4-capture-abc")
+    assert cap["purchase_units"][0]["payments"]["captures"][0]["status"] == "COMPLETED"
+    req = fake.requests[-1]
+    assert req.headers["PayPal-Request-Id"] == "s4-capture-abc" and req.headers["Authorization"] == "Bearer A21-token"
+    assert req.content == b""
+    assert sum(r.url.path == "/v1/oauth2/token" for r in fake.requests) == 1  # token cached
+
+
+def test_paypal_errors_keep_name_and_debug_id():
+    fake = FakePayPal()
+    gw = sandbox(fake)
+    order = gw.create_order({"amount": {"currency_code": "USD", "value": "10.00"}}, "r1")
+    with pytest.raises(PayPalAPIError) as e:
+        gw.capture_order(order["id"], "r2")  # buyer never approved
+    assert e.value.status == 422 and e.value.debug_id == "dbg123" and e.value.details[0]["issue"] == "ORDER_NOT_APPROVED"
+
+
+def test_live_order_waits_for_buyer_then_captures_via_api(monkeypatch):
+    """The JS SDK flow: createOrder -> /prepare (CREATED), buyer approves in the popup, onApprove -> /capture."""
+    client = TestClient(app)
+    snap = client.post("/api/runs").json()
+    run = runs.RUNS[snap["run_id"]]
+    fake = FakePayPal()
+    run.rt.gateway = sandbox(fake)  # this run now talks to a live-shaped PayPal
+    mon = next(i for i in snap["items"] if i["need"]["category"] == "monitors")
+    base = f"/api/runs/{snap['run_id']}"
+    assert client.post(f"{base}/decisions/{mon['lineage_id']}/approve").status_code == 200
+
+    prep = client.post(f"{base}/orders/{mon['lineage_id']}/prepare").json()
+    assert prep["status"] == "CREATED"
+    sent = json.loads(fake.requests[-1].content)["purchase_units"][0]
+    assert sent["custom_id"] == mon["lineage_id"]  # lineage rides on the real order
+
+    early = client.post(f"{base}/orders/{mon['lineage_id']}/capture")  # popup closed / not approved yet
+    assert early.status_code == 502 and early.json()["detail"]["details"][0]["issue"] == "ORDER_NOT_APPROVED"
+    assert client.get(base).json()["items"][1]["status"] != "settled"
+
+    fake.approved.add(prep["order_id"])
+    cap = client.post(f"{base}/orders/{mon['lineage_id']}/capture").json()
+    assert cap["status"] == "COMPLETED" and cap["capture_id"].startswith("CAP")
+    item = next(i for i in client.get(base).json()["items"] if i["lineage_id"] == mon["lineage_id"])
+    assert item["status"] == "settled" and item["order_id"] == prep["order_id"]
+
+
+def test_health_exposes_client_id_only_when_live(monkeypatch):
+    from app.main import settings
+
+    client = TestClient(app)
+    assert client.get("/api/health").json()["paypal_client_id"] is None  # replay
+    monkeypatch.setattr(settings, "replay_mode", False)
+    monkeypatch.setattr(settings, "paypal_client_id", "public-cid")
+    monkeypatch.setattr(settings, "paypal_client_secret", "never-sent")
+    h = client.get("/api/health").json()
+    assert h["paypal_live"] is True and h["paypal_client_id"] == "public-cid"
+    assert "never-sent" not in json.dumps(h)

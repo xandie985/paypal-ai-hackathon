@@ -19,6 +19,32 @@ from typing import Protocol
 import httpx
 
 
+class PayPalAPIError(Exception):
+    """A non-2xx PayPal response, keeping the fields support asks for (name, debug_id, details)."""
+
+    def __init__(self, status: int, name: str, message: str, debug_id: str = "", details: list | None = None):
+        super().__init__(f"{status} {name}: {message}")
+        self.status, self.name, self.debug_id, self.details = status, name, debug_id, details or []
+
+    @classmethod
+    def from_response(cls, r: httpx.Response) -> "PayPalAPIError":
+        try:
+            b = r.json()
+        except ValueError:
+            b = {}
+        return cls(r.status_code, b.get("name", "HTTP_ERROR"), b.get("message", r.text[:200]), b.get("debug_id", ""), b.get("details"))
+
+    def to_dict(self) -> dict:
+        return {
+            "guard": "PayPalAPIError",
+            "status": self.status,
+            "name": self.name,
+            "message": str(self),
+            "debug_id": self.debug_id,
+            "details": self.details,
+        }
+
+
 class PayPalGateway(Protocol):
     def create_order(self, purchase_unit: dict, request_id: str) -> dict: ...
     def capture_order(self, order_id: str, request_id: str) -> dict: ...
@@ -113,11 +139,13 @@ class SandboxPayPal:
         return self._token[0]
 
     def _post(self, path: str, json_body: dict | None, request_id: str | None = None) -> dict:
-        headers = {"Authorization": f"Bearer {self._bearer()}", "Prefer": "return=representation"}
+        # Capture has no body but PayPal still requires the JSON content type (415 without it).
+        headers = {"Authorization": f"Bearer {self._bearer()}", "Prefer": "return=representation", "Content-Type": "application/json"}
         if request_id:
             headers["PayPal-Request-Id"] = request_id
-        r = self._http.post(path, json=json_body, headers=headers)
-        r.raise_for_status()
+        r = self._http.post(path, content=b"" if json_body is None else json.dumps(json_body).encode(), headers=headers)
+        if r.is_error:
+            raise PayPalAPIError.from_response(r)
         return r.json() if r.content else {}
 
     def create_order(self, purchase_unit, request_id):

@@ -22,6 +22,8 @@ from .stages import s01_delegate, s02_discover, s02_negotiate, s03_govern, s04_s
 DEMO_NEEDS = [
     {"description": "1080p webcam", "category": "webcams", "quantity": 2, "method": "direct"},
     {"description": "27in 4K monitor", "category": "monitors", "quantity": 3, "method": "negotiate"},
+    # The direct buy whose merchant hides its return terms: routes to a human on reversibility.
+    {"description": "USB condenser microphone", "category": "microphones", "quantity": 1, "method": "direct"},
 ]
 TERMINAL = {"blocked", "rejected", "settled"}
 
@@ -167,7 +169,9 @@ async def step_discover_and_negotiate(run: Run, need: Need, method: str) -> Item
         quantity=need.quantity,
         return_days=pick.return_days or 0,
         ship_days=2,
-        terms="Retail listing terms, 30-day returns.",
+        terms=f"Retail listing terms, {pick.return_days}-day returns."
+        if pick.return_days is not None
+        else "Retail listing terms. Return window not disclosed by the merchant.",
     )
     lid = txn_lineage(mlid, need.category, pick.product_id)
     return Item(lid, need, method, pick.title, offer, baseline, return_days=pick.return_days)

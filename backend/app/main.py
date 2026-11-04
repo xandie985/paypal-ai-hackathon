@@ -20,6 +20,9 @@ def health():
         "status": "ok",
         "replay_mode": settings.replay_mode,
         "paypal_live": settings.paypal_live,
+        # Public by design: the JS SDK loads with it in the browser. The secret never leaves the server.
+        "paypal_client_id": settings.paypal_client_id if settings.paypal_live else None,
+        "currency": "USD",
         "channel3_configured": bool(settings.channel3_api_key),
         "llm_configured": bool(settings.anthropic_api_key),
     }

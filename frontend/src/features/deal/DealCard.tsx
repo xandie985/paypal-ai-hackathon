@@ -21,7 +21,7 @@ const Stat = ({ k, v, sub }: { k: string; v: string; sub?: string }) => (
   </div>
 )
 
-export function DealCard({ item, runId, busy, onApprove, onReject, onPay }: { item: Item; runId: string; busy: boolean; onApprove: () => void; onReject: () => void; onPay: () => void }) {
+export function DealCard({ item, runId, busy, onApprove, onReject, onPay, onRefresh }: { item: Item; runId: string; busy: boolean; onApprove: () => void; onReject: () => void; onPay: () => void; onRefresh: () => void }) {
   const [open, setOpen] = useState(false)
   const o = item.offer
   const savePct = item.baseline ? ((Number(item.baseline) - Number(o.unit_price)) / Number(item.baseline)) * 100 : null
@@ -32,7 +32,7 @@ export function DealCard({ item, runId, busy, onApprove, onReject, onPay }: { it
         <div>
           <h3 className="font-semibold">{item.title}</h3>
           <p className="text-xs text-slate-500">
-            {item.method === 'negotiate' ? 'Negotiated with 4 sellers' : 'Direct buy from Channel3 listing'} · lineage <span className="font-mono">…{item.lineage_id.slice(-10)}</span>
+            {item.method === 'negotiate' ? 'Negotiated with 4 simulated sellers' : 'Direct buy from Channel3 listing'} · lineage <span className="font-mono">…{item.lineage_id.slice(-10)}</span>
           </p>
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-medium ${status[item.status] ?? 'bg-slate-100'}`}>{item.status.replace('_', ' ')}</span>
@@ -47,7 +47,7 @@ export function DealCard({ item, runId, busy, onApprove, onReject, onPay }: { it
       {o.terms && <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">Seller terms: {o.terms}</p>}
       <RouteCard item={item} busy={busy} onApprove={onApprove} onReject={onReject} />
       <div className="flex flex-wrap items-center gap-3">
-        <PayPalApprove item={item} busy={busy} onPay={onPay} />
+        <PayPalApprove item={item} runId={runId} busy={busy} onPay={onPay} onSettled={onRefresh} />
         <RetryButton runId={runId} item={item} />
         {item.seal && (
           <button className="text-xs text-indigo-700 hover:underline" onClick={() => setOpen(!open)}>

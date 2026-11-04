@@ -69,6 +69,7 @@ export default function App() {
                     busy={busy}
                     onApprove={() => act((id) => api.approve(id, i.lineage_id))}
                     onReject={() => act((id) => api.reject(id, i.lineage_id))}
+                    onRefresh={() => act(async () => {})}
                     onPay={() =>
                       act(async (id) => {
                         await api.prepare(id, i.lineage_id)

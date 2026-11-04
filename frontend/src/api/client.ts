@@ -155,7 +155,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 const base = (id: string) => `/runs/${id}`
 
 export const api = {
-  health: () => call<{ replay_mode: boolean; paypal_live: boolean }>('GET', '/health'),
+  health: () => call<{ replay_mode: boolean; paypal_live: boolean; paypal_client_id?: string | null; currency?: string }>('GET', '/health'),
   startRun: (mandate?: MandateInput) => call<RunSnapshot>('POST', '/runs', mandate ? { mandate } : {}),
   getRun: (id: string) => call<RunSnapshot>('GET', base(id)),
   approve: (id: string, lid: string) => call<RunSnapshot>('POST', `${base(id)}/decisions/${lid}/approve`, {}),

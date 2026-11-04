@@ -12,7 +12,7 @@ from .core.errors import GuardViolation
 from .core.ledger import EvidenceLedger
 from .core.lineage import txn_lineage
 from .domain.models import DeliveryReport, Dispute, Mandate, Need, Proposal, VendorInvoice
-from .integrations.channel3 import ProductSource, make_product_source
+from .integrations.channel3 import LIVE_DEMO_MERCHANTS, ProductSource, make_product_source
 from .integrations.paypal import PayPalGateway, make_gateway
 from .stages import (
     s01_delegate,
@@ -55,7 +55,7 @@ DEMO_MANDATE = Mandate(
     budget=Decimal("2200"),
     auto_threshold=Decimal("300"),
     per_txn_cap=Decimal("1500"),
-    vendor_allowlist=["Northwind Displays", "Contoso Retail"],
+    vendor_allowlist=["Northwind Displays", "Contoso Retail", *LIVE_DEMO_MERCHANTS],
     allowed_categories=["monitors", "webcams", "microphones"],
     min_return_days=30,
 )

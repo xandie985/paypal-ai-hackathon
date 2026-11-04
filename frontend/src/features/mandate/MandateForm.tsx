@@ -7,7 +7,7 @@ const DEFAULTS: MandateInput = {
   budget: '2200',
   auto_threshold: '300',
   per_txn_cap: '1500',
-  vendor_allowlist: ['Northwind Displays', 'Contoso Retail'],
+  vendor_allowlist: ['Northwind Displays', 'Contoso Retail', 'amazon.com', 'bestbuy.com', 'walmart.com', 'target.com', 'newegg.com', 'bhphotovideo.com', 'ebay.com'],
   allowed_categories: ['monitors', 'webcams', 'microphones'],
   min_return_days: 30,
   mode: 'auto',

@@ -19,11 +19,12 @@ def run():
 
 def test_run_pauses_at_human_approval_and_resumes_on_approve(run):
     snap, items = run
-    cam, mon = items["webcams"], items["monitors"]
+    cam, mon, mic = items["webcams"], items["monitors"], items["microphones"]
     assert cam["decision"]["route"] == "AUTO_SETTLE" and cam["status"] == "settled"  # replay auto-settles small buys
     assert mon["decision"]["route"] == "HUMAN_APPROVAL" and mon["status"] == "awaiting_approval"
     assert not snap["complete"]
     base = f"/api/runs/{snap['run_id']}"
+    assert client.post(f"{base}/decisions/{mic['lineage_id']}/reject", json={"reason": "terms hidden"}).status_code == 200
     # No approval, no order.
     assert client.post(f"{base}/orders/{mon['lineage_id']}/prepare").status_code == 409
     assert client.post(f"{base}/decisions/{mon['lineage_id']}/approve").status_code == 200
@@ -108,7 +109,21 @@ def test_reject_closes_the_item(run):
     base = f"/api/runs/{snap['run_id']}"
     assert client.post(f"{base}/decisions/{mon['lineage_id']}/reject", json={"reason": "too pricey"}).status_code == 200
     assert client.post(f"{base}/orders/{mon['lineage_id']}/prepare").status_code == 409
+    assert client.get(base).json()["complete"] is False  # the microphone is still waiting on a human
+    client.post(f"{base}/decisions/{items['microphones']['lineage_id']}/reject", json={"reason": "terms hidden"})
     assert client.get(base).json()["complete"] is True
+
+
+def test_hidden_return_terms_escalate_to_a_human(run):
+    """arXiv:2610.17378: an agent can't decide on terms it can't see, so a cheap buy still goes to a human."""
+    _, items = run
+    mic = items["microphones"]
+    assert mic["return_days"] is None and mic["status"] == "awaiting_approval"
+    assert mic["decision"]["route"] == "HUMAN_APPROVAL"
+    rev = next(f for f in mic["decision"]["factors"] if f["name"] == "reversibility")
+    assert rev["passed"] is False and rev["detail"] == "return terms hidden"
+    assert float(mic["total"]) < 300  # under the auto threshold: hidden terms alone caused the escalation
+    assert "not disclosed" in mic["offer"]["terms"]
 
 
 def test_snapshot_and_events_carry_deal_metadata(run):
