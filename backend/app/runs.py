@@ -119,7 +119,7 @@ RUNS: dict[str, Run] = {}
 
 
 def step_delegate(run: Run) -> None:
-    run.mandate_lineage = s01_delegate.register_mandate(run.rt.ledger, run.mandate)
+    run.mandate_lineage = s01_delegate.register_mandate(run.rt.ledger, run.mandate, delegation_id=run.run_id)
     run.emit("1", "mandate_registered", lineage_id=run.mandate_lineage, digest=run.mandate.digest()[:16])
 
 

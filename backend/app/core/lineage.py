@@ -8,8 +8,11 @@ mandate that authorized the spend (the Issue 113 lineage gap).
 from .canonical import sha256_hex
 
 
-def mandate_lineage(mandate_digest: str) -> str:
-    return f"PG-{mandate_digest[:16]}"
+def mandate_lineage(mandate_digest: str, delegation_id: str) -> str:
+    """Root lineage for one act of delegation. The same mandate delegated twice (two demo runs)
+    gets two lineages, so their PayPal-Request-Ids differ and PayPal can't hand the second run
+    the first run's order. Both inputs are in the mandate ledger entry, so it stays reproducible."""
+    return f"PG-{sha256_hex([mandate_digest, delegation_id])[:16]}"
 
 
 def txn_lineage(mandate_lid: str, *parts) -> str:

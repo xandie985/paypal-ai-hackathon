@@ -170,3 +170,23 @@ def test_studio_rows_are_scoped_to_the_requested_run(run):
 
 def test_studio_rows_unknown_run_is_404():
     assert client.get("/api/studio/rows", params={"run_id": "nope"}).status_code == 404
+
+
+def test_same_mandate_twice_gets_distinct_lineages_and_request_ids():
+    """Rehearsing the demo twice live must create two PayPal orders, not replay the first one."""
+    from app.core.lineage import request_id
+
+    a, b = client.post("/api/runs").json(), client.post("/api/runs").json()
+    assert a["mandate_lineage"] != b["mandate_lineage"]
+    cams = [next(i for i in s["items"] if i["need"]["category"] == "webcams") for s in (a, b)]
+    assert cams[0]["lineage_id"] != cams[1]["lineage_id"]
+    ids = [
+        request_id(c["lineage_id"], "s4", "create_order", runs.RUNS[s["run_id"]].items[c["lineage_id"]].decision.decision_digest)
+        for c, s in zip(cams, (a, b), strict=True)
+    ]
+    assert ids[0] != ids[1]
+    # Within one run the ID is still stable, so a retry stays idempotent.
+    r = client.post(f"/api/runs/{a['run_id']}/orders/{cams[0]['lineage_id']}/retry").json()
+    assert r["same_order"] is True
+    entry = runs.RUNS[a["run_id"]].rt.ledger.entries(a["mandate_lineage"], "mandate")[0].payload
+    assert entry["delegation_id"] == a["run_id"]
