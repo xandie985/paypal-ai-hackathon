@@ -144,3 +144,51 @@ def test_auto_settle_with_saved_wallet_captures_server_side_without_popup(monkey
     # Monitor is HUMAN_APPROVAL: remains awaiting approval, not settled
     monitor = next(i for i in snap["items"] if i["need"]["category"] == "monitors")
     assert monitor["status"] == "awaiting_approval"
+
+    # The vault token is a credential: it must never reach the browser or the permanent ledger.
+    base = f"/api/runs/{snap['run_id']}"
+    bodies = [client.get(base).text, client.get(f"{base}/ledger").text, client.get(f"{base}/events?follow=false").text]
+    assert all("vault_test_456" not in b for b in bodies)
+    assert webcam["seal"]["payment_source"] == "saved_wallet"
+
+    # Seal-before-money: the terms were sealed before the order (and its capture) existed.
+    kinds = [e["kind"] for e in client.get(f"{base}/ledger", params={"lineage": webcam["lineage_id"]}).json()["entries"]]
+    assert kinds.index("seal_intent") < kinds.index("seal") < kinds.index("capture")
+
+
+def test_saved_wallet_is_not_charged_if_the_seal_cannot_be_written(ledger, mandate, monkeypatch):
+    from decimal import Decimal
+
+    from app.core.errors import SealWriteFailed
+    from app.domain.models import Offer, Proposal
+    from app.stages import s03_govern, s04_settle
+
+    fake = FakePayPal()
+    gw = sandbox(fake)
+    o = Offer(
+        seller_id="Contoso Retail", sku="c", turn=1, action="quote", unit_price=Decimal("59"), quantity=1, return_days=30, ship_days=2
+    )
+    d = s03_govern.evaluate(
+        ledger,
+        mandate,
+        Proposal(
+            lineage_id="PG-t.1",
+            vendor=o.seller_id,
+            category="webcams",
+            sku="c",
+            unit_price=o.unit_price,
+            quantity=1,
+            return_days=30,
+            baseline_unit_price=o.unit_price,
+        ),
+        Decimal("0"),
+    )
+    real = ledger.append
+    monkeypatch.setattr(
+        ledger,
+        "append",
+        lambda lid, st, kind, p: (_ for _ in ()).throw(OSError("disk")) if kind == "seal_intent" else real(lid, st, kind, p),
+    )
+    with pytest.raises(SealWriteFailed):
+        s04_settle.prepare_order(ledger, gw, "secret", d, o, title="cam", payment_source={"paypal": {"vault_id": "v"}})
+    assert not any(r.url.path == "/v2/checkout/orders" for r in fake.requests)  # PayPal never asked to charge

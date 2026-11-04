@@ -46,10 +46,8 @@ def prepare_order(
             raise NotAuthorized("human approval required", lineage_id=lid) from e
 
     pu = build_purchase_unit([LineItem(title, offer.sku, offer.unit_price, offer.quantity, tax_rate)], currency, lid, description=title)
-    order = gateway.create_order(pu, request_id(lid, "s4", "create_order", decision.decision_digest), payment_source=payment_source)
-
-    seal = {
-        "order_id": order["id"],
+    vaulted = bool(payment_source)
+    terms = {
         "decision_digest": decision.decision_digest,
         "seller_id": offer.seller_id,
         "sku": offer.sku,
@@ -62,12 +60,29 @@ def prepare_order(
         "terms_hash": sha256_hex(offer.terms),
         "terms_text": offer.terms,
         "buyer_ip": buyer_ip,
-        "vault_id": payment_source.get("paypal", {}).get("vault_id") if payment_source else None,
+        # Which way the buyer paid, never the vault token itself: the seal is shown in the UI and is permanent.
+        "payment_source": "saved_wallet" if vaulted else "buyer_approval",
     }
+    if vaulted:
+        # A saved-wallet order is captured by PayPal at creation, so money moves inside create_order.
+        # Seal the terms first: if this write fails, nothing is charged.
+        try:
+            ledger.append(
+                lid, STAGE, "seal_intent", {**terms, "request_id": request_id(lid, "s4", "create_order", decision.decision_digest)}
+            )
+        except Exception as e:
+            raise SealWriteFailed("seal write failed; saved wallet not charged", lineage_id=lid) from e
+    order = gateway.create_order(pu, request_id(lid, "s4", "create_order", decision.decision_digest), payment_source=payment_source)
+    seal = {"order_id": order["id"], **terms}
     try:
         ledger.append(lid, STAGE, "seal", seal)
     except Exception as e:
-        raise SealWriteFailed("seal write failed; order left uncaptured", order_id=order["id"]) from e
+        msg = (
+            "seal write failed after a saved-wallet charge; the seal_intent entry holds the terms"
+            if vaulted
+            else "seal write failed; order left uncaptured"
+        )
+        raise SealWriteFailed(msg, order_id=order["id"]) from e
     return {"order": order, "purchase_unit": pu, "seal": seal}
 
 

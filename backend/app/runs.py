@@ -16,6 +16,7 @@ from .config import Settings
 from .core.errors import GuardViolation
 from .core.lineage import request_id, txn_lineage
 from .domain.models import Decision, Mandate, Need, Offer, Proposal
+from .integrations.paypal import PayPalAPIError
 from .orchestrator import DEMO_MANDATE, Runtime, demo_sellers
 from .stages import s01_delegate, s02_discover, s02_negotiate, s03_govern, s04_settle
 
@@ -331,8 +332,12 @@ async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dic
                 step_capture_order(run, item.lineage_id)
             elif settings.paypal_live and settings.paypal_vault_id:
                 source = {"paypal": {"vault_id": settings.paypal_vault_id}}
-                step_prepare_order(run, item.lineage_id, payment_source=source)
-                step_capture_order(run, item.lineage_id)
+                try:
+                    step_prepare_order(run, item.lineage_id, payment_source=source)
+                    step_capture_order(run, item.lineage_id)
+                except (GuardViolation, PayPalAPIError) as e:
+                    # Expired or declined saved wallet: the run still starts and the item stays for review.
+                    run.emit("4", "saved_wallet_failed", lineage_id=item.lineage_id, error=str(e))
     run.ready = True
     run.finish_if_done()
     return run
