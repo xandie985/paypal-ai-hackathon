@@ -3,6 +3,7 @@ import { api } from './api/client'
 import { useRunSession } from './api/useRunSession'
 import { AttackButton } from './features/attack/Actions'
 import { DealCard } from './features/deal/DealCard'
+import { DisputeDesk } from './features/dispute/DisputeDesk'
 import { LedgerPanel } from './features/ledger/LedgerPanel'
 import { MarketPanel } from './features/market/MarketPanel'
 import { MandateForm } from './features/mandate/MandateForm'
@@ -84,6 +85,7 @@ export default function App() {
               <Timeline events={events} />
             </>
           )}
+          <DisputeDesk run={run} live={mode === 'live sandbox'} />
         </main>
       )}
     </div>

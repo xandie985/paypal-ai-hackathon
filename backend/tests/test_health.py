@@ -10,6 +10,9 @@ def test_health():
 
 
 def test_demo_endpoint_and_studio_rows():
+    from app import runs
+
+    runs.RUNS.clear()  # without a run_id, Studio shows the latest run; with none, the /demo/run ledger
     out = client.post("/api/demo/run").json()
     assert out["kpis"]["transactions"] == 3
     assert client.get("/api/ledger/verify").json()["chain_ok"] is True

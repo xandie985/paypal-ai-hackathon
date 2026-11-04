@@ -1,16 +1,22 @@
 import asyncio
 import json
+from datetime import date, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import runs
 from .config import settings
 from .core.errors import GuardViolation
+from .core.ledger import EvidenceLedger, open_ledger
 from .domain.models import Mandate
-from .integrations.paypal import PayPalAPIError
+from .integrations.llm import make_llm
+from .integrations.paypal import PayPalAPIError, make_gateway
 from .orchestrator import Runtime, run_demo
+from .stages import s08_defend
 from .stages.s09_observe import kpis, transaction_rows
 
 router = APIRouter(prefix="/api")
@@ -50,13 +56,11 @@ def ledger_verify():
 def studio_rows(run_id: str | None = None):
     """Row data for AG Grid / AG Studio widgets."""
     # An unknown run (e.g. wiped by a backend restart) is a 404, never another run's data.
-    if run_id:
-        target_ledger = _run(run_id).rt.ledger
-    elif runs.RUNS:
-        target_ledger = list(runs.RUNS.values())[-1].rt.ledger
+    if run_id or runs.RUNS:
+        run = _run(run_id) if run_id else list(runs.RUNS.values())[-1]
+        rows = transaction_rows(run.rt.ledger, run.mandate_lineage)
     else:
-        target_ledger = runtime().ledger
-    rows = transaction_rows(target_ledger)
+        rows = transaction_rows(runtime().ledger)
     return {"rows": rows, "kpis": kpis(rows)}
 
 
@@ -143,9 +147,11 @@ async def run_events(run_id: str, follow: bool = True):
 @router.get("/runs/{run_id}/ledger")
 def run_ledger(run_id: str, lineage: str | None = None):
     """This run's sealed evidence, with the chain check, so the UI can show why it can be trusted."""
-    ledger = _run(run_id).rt.ledger
-    ok, bad = ledger.verify()
-    return {"chain_ok": ok, "first_bad_seq": bad, "entries": [e.__dict__ for e in ledger.entries(lineage)]}
+    run = _run(run_id)
+    if lineage and not (lineage == run.mandate_lineage or lineage.startswith(run.mandate_lineage + ".")):
+        raise HTTPException(404, "lineage is not part of this run")
+    ok, bad = run.rt.ledger.verify()  # the chain is checked whole; the entries shown are this run's
+    return {"chain_ok": ok, "first_bad_seq": bad, "entries": [e.__dict__ for e in run.rt.ledger.entries(lineage or run.mandate_lineage)]}
 
 
 @router.post("/runs/{run_id}/decisions/{lineage}/approve")
@@ -182,3 +188,161 @@ def retry(run_id: str, lineage: str):
 def attack(run_id: str):
     d = runs.step_attack(_run(run_id))
     return {"route": d.route, "reasons": d.reasons, "latency_ms": d.latency_ms}
+
+
+# ---- disputes (stage 8) --------------------------------------------------------------------------
+
+_disputes_gw = None
+_dispute_ledger: EvidenceLedger | None = None
+
+
+def disputes_gateway():
+    """One gateway for the dispute desk: the live sandbox, or one shared replay double for demos."""
+    global _disputes_gw
+    if _disputes_gw is None:
+        _disputes_gw = make_gateway(settings)
+    return _disputes_gw
+
+
+def evidence_ledgers() -> list[EvidenceLedger]:
+    """Where a sealed record can live: the persistent live ledger, then each run's ledger (newest first)."""
+    out = [] if settings.replay_mode else [open_ledger(settings.ledger_path)]
+    for r in reversed(list(runs.RUNS.values())):
+        if r.rt.ledger not in out:
+            out.append(r.rt.ledger)
+    return out
+
+
+def fallback_ledger() -> EvidenceLedger:
+    """Where to record a response to a dispute we couldn't match to a sealed order."""
+    global _dispute_ledger
+    if not settings.replay_mode:
+        return open_ledger(settings.ledger_path)
+    _dispute_ledger = _dispute_ledger or EvidenceLedger(":memory:")
+    return _dispute_ledger
+
+
+def _case(dispute_id: str):
+    try:
+        raw = disputes_gateway().get_dispute(dispute_id)
+    except PayPalAPIError as e:
+        raise HTTPException(404 if e.status == 404 else 502, e.to_dict()) from e
+    case = s08_defend.parse_paypal_dispute(raw)
+    ledger, lineage = s08_defend.locate(case, evidence_ledgers())
+    return case, ledger, lineage, s08_defend.assess(case, ledger, lineage, date.today())
+
+
+def _dec(obj):
+    """Money stays a decimal string on the wire, as everywhere else in the API."""
+    return jsonable_encoder(obj, custom_encoder={Decimal: lambda d: format(d, "f")})
+
+
+def _case_json(case) -> dict:
+    return _dec({**case.__dict__})
+
+
+@router.get("/disputes")
+def list_disputes():
+    """Every open case with its recommendation, soonest deadline first."""
+    try:
+        items = disputes_gateway().list_disputes()
+    except PayPalAPIError as e:
+        raise HTTPException(502, e.to_dict()) from e
+    out = []
+    for d in items:
+        case, _, _, a = _case(d["dispute_id"])
+        out.append(
+            {
+                "case": _case_json(case),
+                "recommended": a["recommended"],
+                "win_odds": a["win_odds"],
+                "days_left": a["days_left"],
+                "lineage_found": a["facts"]["lineage_found"],
+            }
+        )
+    return sorted(out, key=lambda r: (r["days_left"] is None, r["days_left"] or 0))
+
+
+@router.get("/disputes/{dispute_id}")
+def get_dispute(dispute_id: str):
+    case, _, _, a = _case(dispute_id)
+    drafts = {o["option"]: s08_defend.draft_reply(case, a, o["option"]) for o in a["options"]}
+    return _dec({"case": _case_json(case), "assessment": a, "drafts": drafts})
+
+
+class DraftBody(BaseModel):
+    option: str
+
+
+@router.post("/disputes/{dispute_id}/draft")
+def polish_draft(dispute_id: str, body: DraftBody):
+    """Template draft, reworded by Claude when a key is configured. The LLM only rewrites tone: the
+    facts it may use are passed in, and the human still reads and approves before anything is sent."""
+    case, _, _, a = _case(dispute_id)
+    text = s08_defend.draft_reply(case, a, body.option)
+    llm = make_llm(settings)
+    polished = None
+    if llm:
+        polished = llm.text(
+            "You edit a merchant's reply to a PayPal dispute. Keep every fact, number and commitment exactly as given; "
+            "add no new facts, promises or legal claims. Make it courteous and under 120 words. Reply with the text only.",
+            f"Buyer's note: {case.buyer_note!r}\nDraft reply:\n{text}",
+        )
+    return {"option": body.option, "text": polished or text, "source": "llm" if polished else "template"}
+
+
+@router.get("/disputes/{dispute_id}/brief.pdf")
+def dispute_brief(dispute_id: str):
+    case, ledger, lineage, _ = _case(dispute_id)
+    if not ledger:
+        raise HTTPException(404, "no sealed record for this dispute, so there is no evidence brief")
+    d = case.as_dispute().model_copy(update={"lineage_id": lineage})
+    pdf = s08_defend.render_pdf(d, s08_defend.build_evidence(ledger, d))
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{dispute_id}-brief.pdf"'})
+
+
+class RespondBody(BaseModel):
+    option: str
+    note: str
+    approver: str = "ops@acme.example"
+
+
+@router.post("/disputes/{dispute_id}/respond")
+def respond_dispute(dispute_id: str, body: RespondBody):
+    """D-4: nothing is sent to PayPal without this explicit human call. The recommendation is advice."""
+    case, ledger, _, a = _case(dispute_id)
+    resp = _guarded(
+        lambda: s08_defend.respond(
+            disputes_gateway(), ledger or fallback_ledger(), case, a, option=body.option, note=body.note, approver=body.approver
+        )
+    )
+    case2, _, _, a2 = _case(dispute_id)
+    return _dec({"paypal": resp, "case": _case_json(case2), "assessment": a2})
+
+
+class SimulateDispute(BaseModel):
+    lineage_id: str
+    reason: str = "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED"
+    note: str = "its not working now. it was working fine and then it stopped. it seems i will have to return it"
+    amount: str | None = None
+
+
+@router.post("/runs/{run_id}/disputes/simulate")
+def simulate_dispute(run_id: str, body: SimulateDispute):
+    """Replay only: the buyer opens a case on a settled item, shaped like a real sandbox dispute."""
+    if not settings.replay_mode:
+        raise HTTPException(409, "live mode: open disputes as the sandbox buyer in the Resolution Center")
+    item = _guarded(lambda: _run(run_id).item(body.lineage_id))
+    if not item.capture:
+        raise HTTPException(409, "only a settled item can be disputed")
+    d = disputes_gateway().open_dispute(
+        lineage_id=body.lineage_id,
+        capture_id=item.capture["id"],
+        amount=body.amount or item.capture["amount"]["value"],
+        reason=body.reason,
+        note=body.note,
+        item_name=item.title,
+        due=(date.today() + timedelta(days=10)).isoformat(),
+        created=f"{date.today().isoformat()}T09:00:00Z",
+    )
+    return {"dispute_id": d["dispute_id"]}

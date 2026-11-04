@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from .config import Settings
 from .core.errors import GuardViolation
-from .core.ledger import EvidenceLedger
+from .core.ledger import EvidenceLedger, open_ledger
 from .core.lineage import txn_lineage
 from .domain.models import DeliveryReport, Dispute, Mandate, Need, Proposal, VendorInvoice
 from .integrations.channel3 import LIVE_DEMO_MERCHANTS, ProductSource, make_product_source
@@ -40,7 +40,7 @@ class Runtime:
 
     @classmethod
     def build(cls, settings: Settings, ledger_path: str | None = None) -> "Runtime":
-        return cls(settings, EvidenceLedger(ledger_path or settings.ledger_path), make_gateway(settings), make_product_source(settings))
+        return cls(settings, open_ledger(ledger_path or settings.ledger_path), make_gateway(settings), make_product_source(settings))
 
     def log(self, stage: str, event: str, **data) -> None:
         self.timeline.append({"stage": stage, "event": event, **data})

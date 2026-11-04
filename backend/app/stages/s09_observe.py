@@ -7,9 +7,10 @@ from decimal import Decimal
 from ..core.ledger import EvidenceLedger
 
 
-def transaction_rows(ledger: EvidenceLedger) -> list[dict]:
+def transaction_rows(ledger: EvidenceLedger, lineage_prefix: str | None = None) -> list[dict]:
+    """`lineage_prefix` = a run's mandate lineage: live runs share one ledger file."""
     by_lid: dict[str, dict] = defaultdict(dict)
-    for e in ledger.entries():
+    for e in ledger.entries(lineage_prefix):
         if "." not in e.lineage_id:
             continue
         r = by_lid[e.lineage_id]

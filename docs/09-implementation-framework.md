@@ -288,6 +288,27 @@ This section records the empirical experiments conducted against live external A
   - PayPal's sandbox Resolution Center UI is currently experiencing an internal server error across all transactions (*"We're sorry, it looks like something went wrong on our end"*).
   - **Guardrail R3 Active:** Activated our planned deterministic dispute fallback (`PP-D-1001`). Stage 8 (`s08_defend.py`) successfully generated the ReportLab PDF evidence brief, verified SHA-256 hash chains from the ledger, computed win probability (95%), and constructed the multipart `provide-evidence` payload. No hackathon progress was blocked.
 
+### Stage 8 dispute desk (2026-11-05)
+
+A PayPal dispute is answered rationally from records sealed before it existed. A human sends the response (D-4).
+
+- **Persistence first.** Live runs used to write evidence to an in-memory ledger, so a dispute arriving after a restart had nothing to defend with. That's what happened to `PP-R-EGO-10196439`: its seal `PG-986dd7cd20d6febc.9d975a51f6` lived only in that backend process. Live runs now append to one persistent ledger (`LEDGER_PATH`, one `EvidenceLedger` per file via `core/ledger.open_ledger`). Replay runs stay in memory. Studio rows, a run's ledger view and its entry count are scoped to the run's own lineage.
+- **Matching.** The lineage comes back in `disputed_transactions[].custom`. If it's missing, the seller transaction ID is matched against ledger `capture` entries.
+- **Assessment** (`s08_defend.assess`, deterministic):
+  - Facts come from the ledger: when the order was sealed, the true return window (from the decision, so hidden terms stay hidden rather than reading as 0), human approval, delivery proof, missing evidence, chain integrity.
+  - The buyer's note is classified as defect, not-received or other.
+  - Win odds are capped at 35% on a defect claim, because a seal proves what was sold, not that the unit still works.
+- **Options and expected value.** Contest = p × amount − handling cost. Refund on return = recovery × amount − return label. Accept = 0. The cost constants are labelled estimates at the top of `s08_defend.py`.
+- **Hard rules.**
+  - Never contest without a sealed record.
+  - Never contest a not-as-described claim inside our own sealed return window.
+  - Nothing once the response deadline has passed.
+- **Allowed actions.** Only actions PayPal currently lists in `links` are allowed. When PayPal allows only `send_message`, a refund or acceptance is proposed in a message.
+- **Responding.** `POST /api/disputes/{id}/respond` sends `provide-evidence` (with the PDF brief), `send-message`, `make-offer` (`REFUND_WITH_RETURN`) or `accept-claim`. Each option is sent once. The ledger records the option, channel, EV, recommendation, whether it was followed, the approver and a hash of the note (not the text).
+- **LLM.** It is optional and only rewords the draft (`POST /api/disputes/{id}/draft`). Without `ANTHROPIC_API_KEY` the template is used.
+- **UI.** The Mission Control "Dispute desk" shows the case list, facts, options with EV, the recommendation, an editable draft, the PDF brief, and a "Send to PayPal" confirm. In replay it can simulate a buyer dispute on any settled item.
+- **Not verified live yet.** The `make-offer` and `accept-claim` request bodies follow PayPal's documented fields but have not been sent to the sandbox. Try them on the sandbox case before relying on them in the demo.
+
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.
 * **PactGuard AI 3-Layer Governance:**

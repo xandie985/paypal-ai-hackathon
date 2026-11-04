@@ -53,6 +53,9 @@ class PayPalGateway(Protocol):
     def remind_invoice(self, invoice_id: str, request_id: str) -> dict: ...
     def create_payout(self, batch: dict, request_id: str) -> dict: ...
     def provide_evidence(self, dispute_id: str, evidence: dict, files: list[tuple[str, bytes]]) -> dict: ...
+    def list_disputes(self) -> list[dict]: ...
+    def get_dispute(self, dispute_id: str) -> dict: ...
+    def dispute_action(self, dispute_id: str, action: str, body: dict) -> dict: ...
     def verify_webhook(self, headers: dict, body: dict) -> bool: ...
 
 
@@ -66,6 +69,7 @@ class ReplayPayPal:
         self.calls: list[tuple[str, str]] = []  # (operation, request_id): lets tests count real side effects
         self.orders: dict[str, dict] = {}
         self.evidence: dict[str, dict] = {}
+        self.disputes: dict[str, dict] = {}
 
     def _idempotent(self, op: str, request_id: str, make) -> dict:
         if request_id in self._by_request:
@@ -118,8 +122,71 @@ class ReplayPayPal:
         )
 
     def provide_evidence(self, dispute_id, evidence, files):
+        if dispute_id in self.disputes and "provide_evidence" not in {link["rel"] for link in self.disputes[dispute_id]["links"]}:
+            raise PayPalAPIError(422, "UNPROCESSABLE_ENTITY", "provide_evidence not allowed", details=[{"issue": "ACTION_NOT_ALLOWED"}])
         self.calls.append(("provide_evidence", dispute_id))
         self.evidence[dispute_id] = {"evidence": evidence, "files": [n for n, _ in files]}
+        return {"links": [{"rel": "self", "href": f"/v1/customer/disputes/{dispute_id}"}]}
+
+    # ---- disputes (shape copied from a real sandbox case, GET /v1/customer/disputes/{id}) ----
+
+    STAGE_LINKS = {
+        "INQUIRY": ["send_message", "make_offer", "accept_claim", "provide_evidence"],
+        "CHARGEBACK": ["provide_evidence", "accept_claim"],
+    }
+
+    def open_dispute(
+        self,
+        *,
+        lineage_id: str,
+        capture_id: str,
+        amount: str,
+        reason: str,
+        note: str,
+        item_name: str,
+        stage: str = "INQUIRY",
+        due: str = "2026-11-20",
+        created: str = "2026-11-05T10:00:00Z",
+    ) -> dict:
+        did = f"PP-R-REPLAY-{len(self.disputes) + 1:08d}"
+        self.disputes[did] = {
+            "dispute_id": did,
+            "create_time": created,
+            "reason": reason,
+            "status": "WAITING_FOR_SELLER_RESPONSE",
+            "dispute_life_cycle_stage": stage,
+            "seller_response_due_date": f"{due}T23:59:59Z",
+            "dispute_amount": {"currency_code": "USD", "value": amount},
+            "disputed_transactions": [{"custom": lineage_id, "seller_transaction_id": capture_id, "item_name": item_name, "notes": note}],
+            "messages": [],
+            "links": [
+                {"rel": r, "method": "POST", "href": f"/v1/customer/disputes/{did}/{r.replace('_', '-')}"} for r in self.STAGE_LINKS[stage]
+            ],
+        }
+        return self.disputes[did]
+
+    def list_disputes(self):
+        return [{k: d[k] for k in ("dispute_id", "reason", "status", "dispute_amount", "create_time")} for d in self.disputes.values()]
+
+    def get_dispute(self, dispute_id):
+        if dispute_id not in self.disputes:
+            raise PayPalAPIError(404, "RESOURCE_NOT_FOUND", "dispute not found")
+        return self.disputes[dispute_id]
+
+    def dispute_action(self, dispute_id, action, body):
+        d = self.get_dispute(dispute_id)
+        if action not in {link["rel"] for link in d["links"]}:
+            raise PayPalAPIError(
+                422, "UNPROCESSABLE_ENTITY", f"{action} not allowed in {d['status']}", details=[{"issue": "ACTION_NOT_ALLOWED"}]
+            )
+        self.calls.append((action, dispute_id))
+        if action == "send_message":
+            d["messages"].append({"posted_by": "SELLER", "content": body["message"]})
+        elif action == "make_offer":
+            d["status"], d["offer"] = "WAITING_FOR_BUYER_RESPONSE", body
+            d["links"] = [link for link in d["links"] if link["rel"] == "send_message"]
+        elif action == "accept_claim":
+            d["status"], d["links"] = "RESOLVED", []
         return {"links": [{"rel": "self", "href": f"/v1/customer/disputes/{dispute_id}"}]}
 
     def verify_webhook(self, headers, body):
@@ -151,6 +218,22 @@ class SandboxPayPal:
             raise PayPalAPIError.from_response(r)
         return r.json() if r.content else {}
 
+    def _get(self, path: str, params: dict | None = None) -> dict:
+        r = self._http.get(path, params=params, headers={"Authorization": f"Bearer {self._bearer()}"})
+        if r.is_error:
+            raise PayPalAPIError.from_response(r)
+        return r.json()
+
+    def list_disputes(self):
+        return self._get("/v1/customer/disputes", {"page_size": 50}).get("items", [])
+
+    def get_dispute(self, dispute_id):
+        return self._get(f"/v1/customer/disputes/{dispute_id}")
+
+    def dispute_action(self, dispute_id, action, body):
+        # send_message -> /send-message, make_offer -> /make-offer, accept_claim -> /accept-claim
+        return self._post(f"/v1/customer/disputes/{dispute_id}/{action.replace('_', '-')}", body)
+
     def create_order(self, purchase_unit, request_id, payment_source: dict | None = None):
         body = {"intent": "CAPTURE", "purchase_units": [purchase_unit]}
         if payment_source:
@@ -180,7 +263,8 @@ class SandboxPayPal:
             files=[("input", (None, json.dumps(evidence), "application/json"))]
             + [("file1" if i == 0 else f"file{i + 1}", (name, data, "application/pdf")) for i, (name, data) in enumerate(files)],
         )
-        r.raise_for_status()
+        if r.is_error:
+            raise PayPalAPIError.from_response(r)
         return r.json() if r.content else {}
 
     def verify_webhook(self, headers, body):

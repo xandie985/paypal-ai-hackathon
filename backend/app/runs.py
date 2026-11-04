@@ -107,7 +107,7 @@ class Run:
                 "events": len(self.events),
                 "budget": self.mandate.budget,
                 "spent": self.rt.spent(self.mandate_lineage),
-                "ledger_entries": len(self.rt.ledger.entries()),
+                "ledger_entries": len(self.rt.ledger.entries(self.mandate_lineage)),
             }
         )
 
@@ -313,7 +313,10 @@ def step_attack(run: Run) -> Decision:
 
 
 async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dict] | None) -> Run:
-    run = Run(uuid.uuid4().hex[:12], Runtime.build(settings, ":memory:"), mandate or DEMO_MANDATE)
+    # Live runs persist their evidence: a dispute can arrive weeks later, after any restart, and stage 8
+    # must still find the seal. Replay runs stay in memory so rehearsals don't pile up in the file.
+    ledger_path = ":memory:" if settings.replay_mode else settings.ledger_path
+    run = Run(uuid.uuid4().hex[:12], Runtime.build(settings, ledger_path), mandate or DEMO_MANDATE)
     RUNS[run.run_id] = run
     step_delegate(run)
     for spec in needs or DEMO_NEEDS:

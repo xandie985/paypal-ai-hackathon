@@ -132,6 +132,40 @@ export type MandateInput = {
   mode: 'auto' | 'review_first'
 }
 
+export type DisputeCase = {
+  dispute_id: string
+  reason: string
+  stage: string
+  status: string
+  amount: string
+  currency: string
+  lineage_id: string | null
+  capture_id: string | null
+  item_name: string
+  buyer_note: string
+  due_date: string | null
+  actions: string[]
+}
+export type DisputeOption = {
+  option: 'contest' | 'refund_with_return' | 'accept'
+  via: string
+  ev: string
+  basis: string
+  available: boolean
+  excluded_by: string | null
+}
+export type DisputeAssessment = {
+  dispute_id: string
+  lineage_id: string | null
+  win_odds: number
+  days_left: number | null
+  recommended: DisputeOption['option'] | null
+  options: DisputeOption[]
+  facts: Record<string, unknown> & { lineage_found: boolean; claim: string }
+}
+export type DisputeSummary = { case: DisputeCase; recommended: string | null; win_odds: number; days_left: number | null; lineage_found: boolean }
+export type DisputeDetail = { case: DisputeCase; assessment: DisputeAssessment; drafts: Record<string, string> }
+
 // Guards come back as 409 with {guard, message}; surface the guard's name to the UI.
 export class ApiError extends Error {
   status: number
@@ -171,4 +205,12 @@ export const api = {
   studioRows: (runId?: string) =>
     call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', runId ? `/studio/rows?run_id=${encodeURIComponent(runId)}` : '/studio/rows'),
   demoRun: () => call<unknown>('POST', '/demo/run'),
+  disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
+  dispute: (id: string) => call<DisputeDetail>('GET', `/disputes/${id}`),
+  draftDispute: (id: string, option: string) => call<{ text: string; source: string }>('POST', `/disputes/${id}/draft`, { option }),
+  respondDispute: (id: string, option: string, note: string) =>
+    call<{ case: DisputeCase; assessment: DisputeAssessment }>('POST', `/disputes/${id}/respond`, { option, note }),
+  simulateDispute: (runId: string, lineage_id: string, amount?: string) =>
+    call<{ dispute_id: string }>('POST', `${base(runId)}/disputes/simulate`, { lineage_id, amount }),
+  briefUrl: (id: string) => `/api/disputes/${id}/brief.pdf`,
 }

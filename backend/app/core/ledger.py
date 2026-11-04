@@ -104,3 +104,18 @@ class EvidenceLedger:
         import json
 
         return LedgerEntry(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5], r[6], r[7], r[8])
+
+
+_SHARED: dict[str, EvidenceLedger] = {}
+_SHARED_LOCK = threading.Lock()
+
+
+def open_ledger(path: str) -> EvidenceLedger:
+    """One ledger object per file per process. Live runs all append to the same file, and one
+    object (one lock) keeps their seq/prev_hash chain from racing. ':memory:' is always private."""
+    if path == ":memory:":
+        return EvidenceLedger(path)
+    with _SHARED_LOCK:
+        if path not in _SHARED:
+            _SHARED[path] = EvidenceLedger(path)
+        return _SHARED[path]
