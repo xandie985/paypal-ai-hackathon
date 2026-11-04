@@ -252,7 +252,9 @@ def step_capture_order(run: Run, lineage: str) -> dict:
     if item.capture:
         return item.capture
     try:
-        item.capture = s04_settle.capture(run.rt.ledger, run.rt.gateway, lineage, item.prep["order"]["id"])
+        item.capture = s04_settle.capture(
+            run.rt.ledger, run.rt.gateway, lineage, item.prep["order"]["id"], order_payload=item.prep["order"]
+        )
     except GuardViolation as e:
         run.emit("4", "guard", **e.to_dict())
         raise

@@ -71,12 +71,15 @@ def prepare_order(
     return {"order": order, "purchase_unit": pu, "seal": seal}
 
 
-def capture(ledger: EvidenceLedger, gateway: PayPalGateway, lineage_id: str, order_id: str) -> dict:
+def capture(ledger: EvidenceLedger, gateway: PayPalGateway, lineage_id: str, order_id: str, order_payload: dict | None = None) -> dict:
     seals = [e for e in ledger.entries(lineage_id, "seal") if e.payload["order_id"] == order_id]
     if not seals:
         raise SealMissing("no seal for order; refusing to capture", order_id=order_id)
-    resp = gateway.capture_order(order_id, request_id(lineage_id, "s4", "capture", order_id))
-    caps = [c for pu in resp.get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
+    # Check if order was already captured at creation time (vaulted payment source)
+    caps = [c for pu in (order_payload or {}).get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
+    if not (caps and caps[0].get("status") == "COMPLETED"):
+        resp = gateway.capture_order(order_id, request_id(lineage_id, "s4", "capture", order_id))
+        caps = [c for pu in resp.get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
     # Guard against false 'captured': order status COMPLETED doesn't mean the money moved.
     if not caps or caps[0]["status"] != "COMPLETED":
         status = caps[0]["status"] if caps else "NO_CAPTURE"
