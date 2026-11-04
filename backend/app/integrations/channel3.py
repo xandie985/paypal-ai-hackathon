@@ -30,6 +30,7 @@ RETURN_POLICY_DAYS: dict[str, int | None] = {
     "newegg.com": 30,
     "bhphotovideo.com": 30,
     "ebay.com": None,  # marketplace: each seller sets its own policy
+    "adorama.com": None,  # feed does not expose return terms; routes to human
 }
 
 # Merchants the live demo queries return. DEMO_MANDATE's allowlist is built from these.

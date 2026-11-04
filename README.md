@@ -88,6 +88,13 @@ make backend
 
 `REPLAY_MODE=true` (the default) runs the whole demo arc offline; `POST /api/demo/run` returns the timeline.
 
+### 🔬 Live Empirical Validation & Experiments
+The codebase has been empirically verified against live sandbox APIs (documented in detail in [`docs/09-implementation-framework.md` §7](docs/09-implementation-framework.md#7-live-sandbox--integration-experiments-log-phases-0--1)):
+* **Autonomous Vaulted-Wallet Execution (B-9):** Confirmed zero-popup server-side capture via PayPal Vault payment tokens (`vault_id: 8ng18757…`, Order `7LX28344P4713330H`, Capture `3L94707948760335B` `COMPLETED`).
+* **Real-World Discovery & Pricing Baseline (Channel3):** Live catalog queries via `/v1/search` with header `x-api-key`, mapped through a verified retailer return-policy table (`RETURN_POLICY_DAYS`).
+* **Spend Mandate Governance & Human Approval:** Deterministic 4-Factor Firewall (`Warrant`, `Reversibility`, `Price vs Baseline`, `Budget & Velocity`). Low-risk items under auto-threshold auto-settle; high-value negotiated items ($1,020 monitor batch) or items with hidden return terms require explicit user approval via the golden PayPal JS SDK button.
+* **Cryptographic Ledger & Dispute Defense:** Tamper-evident SHA-256 hash chaining, dynamic ReportLab PDF evidence brief generation, and automated win probability calculation (95%). Tested against dispute fallback `PP-D-1001` (compensating for PayPal Sandbox UI Resolution Center server-side bugs).
+
 ---
 
 ## 🚀 Quick Navigation

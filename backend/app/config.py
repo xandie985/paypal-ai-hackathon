@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     paypal_client_secret: str = ""
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
     paypal_webhook_id: str = ""
+    paypal_vault_id: str = ""
     channel3_api_key: str = ""
     channel3_base_url: str = "https://api.trychannel3.com"
     anthropic_api_key: str = ""

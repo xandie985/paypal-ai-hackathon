@@ -46,7 +46,7 @@ class PayPalAPIError(Exception):
 
 
 class PayPalGateway(Protocol):
-    def create_order(self, purchase_unit: dict, request_id: str) -> dict: ...
+    def create_order(self, purchase_unit: dict, request_id: str, payment_source: dict | None = None) -> dict: ...
     def capture_order(self, order_id: str, request_id: str) -> dict: ...
     def create_invoice(self, invoice: dict, request_id: str) -> dict: ...
     def send_invoice(self, invoice_id: str, request_id: str) -> dict: ...
@@ -77,11 +77,14 @@ class ReplayPayPal:
     def _id(self, prefix: str) -> str:
         return f"{prefix}{next(self._ids):06d}"
 
-    def create_order(self, purchase_unit, request_id):
+    def create_order(self, purchase_unit, request_id, payment_source=None):
         def make():
             oid = self._id("ORD-REPLAY-")
-            # Replay auto-approves; in sandbox the buyer approves via the JS SDK first.
-            self.orders[oid] = {"id": oid, "status": "APPROVED", "purchase_units": [purchase_unit]}
+            # Replay auto-approves; in sandbox the buyer approves via the JS SDK first (or via saved vault).
+            order = {"id": oid, "status": "APPROVED", "purchase_units": [purchase_unit]}
+            if payment_source:
+                order["payment_source"] = payment_source
+            self.orders[oid] = order
             return self.orders[oid]
 
         return self._idempotent("create_order", request_id, make)
@@ -148,8 +151,11 @@ class SandboxPayPal:
             raise PayPalAPIError.from_response(r)
         return r.json() if r.content else {}
 
-    def create_order(self, purchase_unit, request_id):
-        return self._post("/v2/checkout/orders", {"intent": "CAPTURE", "purchase_units": [purchase_unit]}, request_id)
+    def create_order(self, purchase_unit, request_id, payment_source: dict | None = None):
+        body = {"intent": "CAPTURE", "purchase_units": [purchase_unit]}
+        if payment_source:
+            body["payment_source"] = payment_source
+        return self._post("/v2/checkout/orders", body, request_id)
 
     def capture_order(self, order_id, request_id):
         return self._post(f"/v2/checkout/orders/{order_id}/capture", None, request_id)

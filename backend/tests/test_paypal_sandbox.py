@@ -28,7 +28,11 @@ class FakePayPal:
         if path == "/v2/checkout/orders":
             body = json.loads(req.content)
             oid = f"5O{len(self.orders):015d}"
-            self.orders[oid] = {"id": oid, "status": "CREATED", "purchase_units": body["purchase_units"]}
+            is_vaulted = bool(body.get("payment_source", {}).get("paypal", {}).get("vault_id"))
+            status = "APPROVED" if is_vaulted else "CREATED"
+            if is_vaulted:
+                self.approved.add(oid)
+            self.orders[oid] = {"id": oid, "status": status, "purchase_units": body["purchase_units"]}
             return httpx.Response(201, json=self.orders[oid])
         if path.endswith("/capture"):
             oid = path.split("/")[-2]
@@ -117,3 +121,26 @@ def test_health_exposes_client_id_only_when_live(monkeypatch):
     h = client.get("/api/health").json()
     assert h["paypal_live"] is True and h["paypal_client_id"] == "public-cid"
     assert "never-sent" not in json.dumps(h)
+
+
+def test_auto_settle_with_saved_wallet_captures_server_side_without_popup(monkeypatch):
+    from app.main import settings
+
+    fake = FakePayPal()
+    monkeypatch.setattr(settings, "replay_mode", False)
+    monkeypatch.setattr(settings, "paypal_client_id", "cid")
+    monkeypatch.setattr(settings, "paypal_client_secret", "secret")
+    monkeypatch.setattr(settings, "paypal_vault_id", "vault_test_456")
+    monkeypatch.setattr("app.orchestrator.make_gateway", lambda s: sandbox(fake))
+
+    client = TestClient(app)
+    snap = client.post("/api/runs").json()
+    # Webcam is AUTO_SETTLE: with vault_id configured, it is prepared and captured server-side
+    webcam = next(i for i in snap["items"] if i["need"]["category"] == "webcams")
+    assert webcam["status"] == "settled"
+    assert webcam["order_id"].startswith("5O")
+    assert webcam["capture_id"].startswith("CAP")
+
+    # Monitor is HUMAN_APPROVAL: remains awaiting approval, not settled
+    monitor = next(i for i in snap["items"] if i["need"]["category"] == "monitors")
+    assert monitor["status"] == "awaiting_approval"

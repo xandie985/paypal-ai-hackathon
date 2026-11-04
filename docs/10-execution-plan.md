@@ -162,17 +162,17 @@ make test
 ```
 Expect 29 passing. If the number differs, fix it before Phase 1. Every later phase depends on these guards.
 
-**Accounts and blockers.** These are doc 09's B-1 to B-8, plus one new item.
-| ID | Action | How to verify it worked |
-|---|---|---|
-| B-1 | Create a sandbox REST app. Put `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` in `.env`. Create sandbox **business** (us) and **personal** (buyer) accounts. | `POST /v1/oauth2/token` returns a token |
-| B-2 | Check that Payouts is enabled on the sandbox business account | A $1 `POST /v1/payments/payouts` returns 201, not 403 |
-| B-4 | **Open a sandbox dispute now.** Buy something as the sandbox buyer, then open a dispute in the sandbox Resolution Center. | `GET /v1/customer/disputes` lists it. Note when it reaches `WAITING_FOR_SELLER_RESPONSE`. |
-| B-5 | Redeem `PAYPAL-HACKATHON-2026`. Read the Channel3 docs: path, auth header, response fields, whether return policy is exposed. | One real search returns products |
-| B-6 | **Done 2026-11-01.** AG Studio Pro with AI trial licence in `frontend/.env.local` (`VITE_AG_STUDIO_LICENSE`). Packages `ag-studio` and `ag-studio-react`, both 3.0.0. | `#/studio` renders run rows with the watermark hidden and no licence warning |
-| B-7 | Render and APIMatic accounts | Logged in. Context Plugin installed in the editor. |
-| B-8 | `ANTHROPIC_API_KEY` (optional) | `make_llm` returns a client |
-| **B-9 (new)** | **Can AUTO_SETTLE capture without a buyer popup?** A server-created order needs buyer approval before capture. An "auto" purchase is only truly autonomous if the buyer has saved a PayPal wallet that we can charge later (vaulting). Check whether the sandbox app supports saving a PayPal wallet. | A test order against a saved wallet captures without a popup. If it doesn't, use the fallback in §5. |
+**Accounts and blockers.** These are doc 09's B-1 to B-8, plus B-9.
+| ID | Action | How to verify it worked | Status |
+|---|---|---|---|
+| B-1 | Create a sandbox REST app. Put `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` in `.env`. Create sandbox **business** (us) and **personal** (buyer) accounts. | `POST /v1/oauth2/token` returns a token | **Done (PASS)** |
+| B-2 | Check that Payouts is enabled on the sandbox business account | A $1 `POST /v1/payments/payouts` returns 201, not 403 | **Done (PASS, batch UYPJ27MNP6X5J)** |
+| B-4 | Open a sandbox dispute. Buy something as sandbox buyer, then open a dispute in the sandbox Resolution Center. | `GET /v1/customer/disputes` lists it. Note when it reaches `WAITING_FOR_SELLER_RESPONSE`. | **Blocked on PayPal UI bug; Fallback R3 active (`PP-D-1001`)** |
+| B-5 | Redeem `PAYPAL-HACKATHON-2026`. Read the Channel3 docs: path, auth header, response fields, whether return policy is exposed. | One real search returns products | **Done (PASS, `/v1/search` + return table)** |
+| B-6 | **Done 2026-11-01.** AG Studio Pro with AI trial licence in `frontend/.env.local` (`VITE_AG_STUDIO_LICENSE`). Packages `ag-studio` and `ag-studio-react`, both 3.0.0. | `#/studio` renders run rows with the watermark hidden and no licence warning | **Done (PASS, closed 2026-11-01)** |
+| B-7 | Render and APIMatic accounts | Logged in. Context Plugin installed in the editor. | Open |
+| B-8 | `ANTHROPIC_API_KEY` (optional) | `make_llm` returns a client | Optional (skipped in preflight) |
+| **B-9 (new)** | **Can AUTO_SETTLE capture without a buyer popup?** A server-created order needs buyer approval before capture. An "auto" purchase is only truly autonomous if the buyer has saved a PayPal wallet that we can charge later (vaulting). Check whether the sandbox app supports saving a PayPal wallet. | A test order against a saved wallet captures without a popup. If it doesn't, use the fallback in §5. | **Done (PASS, vault id `8ng18757…`, order `7LX28344P4713330H` captured)** |
 
 **Decisions to record in doc 09 §7.** Each comes with a recommendation.
 | ID | Question | Recommendation |

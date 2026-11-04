@@ -34,6 +34,7 @@ def prepare_order(
     approval_token: str | None = None,
     buyer_ip: str = "0.0.0.0",
     currency: str = "USD",
+    payment_source: dict | None = None,
 ) -> dict:
     lid = decision.lineage_id
     if decision.route == "BLOCKED":
@@ -45,7 +46,7 @@ def prepare_order(
             raise NotAuthorized("human approval required", lineage_id=lid) from e
 
     pu = build_purchase_unit([LineItem(title, offer.sku, offer.unit_price, offer.quantity, tax_rate)], currency, lid, description=title)
-    order = gateway.create_order(pu, request_id(lid, "s4", "create_order", decision.decision_digest))
+    order = gateway.create_order(pu, request_id(lid, "s4", "create_order", decision.decision_digest), payment_source=payment_source)
 
     seal = {
         "order_id": order["id"],
@@ -61,6 +62,7 @@ def prepare_order(
         "terms_hash": sha256_hex(offer.terms),
         "terms_text": offer.terms,
         "buyer_ip": buyer_ip,
+        "vault_id": payment_source.get("paypal", {}).get("vault_id") if payment_source else None,
     }
     try:
         ledger.append(lid, STAGE, "seal", seal)

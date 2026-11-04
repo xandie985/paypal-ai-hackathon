@@ -20,7 +20,7 @@ from .orchestrator import DEMO_MANDATE, Runtime, demo_sellers
 from .stages import s01_delegate, s02_discover, s02_negotiate, s03_govern, s04_settle
 
 DEMO_NEEDS = [
-    {"description": "1080p webcam", "category": "webcams", "quantity": 2, "method": "direct"},
+    {"description": "1080p webcam newegg", "category": "webcams", "quantity": 2, "method": "direct"},
     {"description": "27in 4K monitor", "category": "monitors", "quantity": 3, "method": "negotiate"},
     # The direct buy whose merchant hides its return terms: routes to a human on reversibility.
     {"description": "USB condenser microphone", "category": "microphones", "quantity": 1, "method": "direct"},
@@ -221,7 +221,7 @@ def step_reject(run: Run, lineage: str, approver: str, reason: str) -> None:
     run.finish_if_done()
 
 
-def step_prepare_order(run: Run, lineage: str) -> dict:
+def step_prepare_order(run: Run, lineage: str, payment_source: dict | None = None) -> dict:
     item = run.item(lineage)
     if item.prep:
         return item.prep
@@ -236,6 +236,7 @@ def step_prepare_order(run: Run, lineage: str) -> dict:
             tax_rate=Decimal("0"),
             approval_token=item.token,
             buyer_ip="203.0.113.7",
+            payment_source=payment_source,
         )
     except GuardViolation as e:
         run.emit("4", "guard", **e.to_dict())
@@ -318,10 +319,18 @@ async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dic
         item = await step_discover_and_negotiate(run, need, method)
         run.items[item.lineage_id] = item
         step_govern(run, item)
-        # Replay orders are pre-approved, so AUTO_SETTLE can capture server-side. Live orders wait for the buyer popup.
-        if settings.replay_mode and item.status == "authorized" and item.decision.route == "AUTO_SETTLE":
-            step_prepare_order(run, item.lineage_id)
-            step_capture_order(run, item.lineage_id)
+        # AUTO_SETTLE:
+        # - Replay: auto-approves and captures server-side.
+        # - Live with saved wallet (vault): captures server-side with zero popup using the vaulted payment source.
+        # - Live without saved wallet: leaves item in "authorized" state for buyer popup approval.
+        if item.status == "authorized" and item.decision.route == "AUTO_SETTLE":
+            if settings.replay_mode:
+                step_prepare_order(run, item.lineage_id)
+                step_capture_order(run, item.lineage_id)
+            elif settings.paypal_live and settings.paypal_vault_id:
+                source = {"paypal": {"vault_id": settings.paypal_vault_id}}
+                step_prepare_order(run, item.lineage_id, payment_source=source)
+                step_capture_order(run, item.lineage_id)
     run.ready = True
     run.finish_if_done()
     return run
