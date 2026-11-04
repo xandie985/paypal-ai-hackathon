@@ -101,6 +101,8 @@ export type LedgerView = { chain_ok: boolean; first_bad_seq: number | null; entr
 // One row per purchase lineage from GET /api/studio/rows. Money arrives as decimal strings.
 export type StudioRow = {
   lineage_id: string
+  order_id?: string
+  capture_id?: string
   vendor?: string
   category?: string
   action?: string
@@ -166,6 +168,7 @@ export const api = {
   attack: (id: string) => call<{ route: string; reasons: string[]; latency_ms: number }>('POST', `${base(id)}/attack`),
   ledger: (id: string) => call<LedgerView>('GET', `${base(id)}/ledger`),
   events: (id: string) => new EventSource(`/api${base(id)}/events`),
-  studioRows: () => call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', '/studio/rows'),
+  studioRows: (runId?: string) =>
+    call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', runId ? `/studio/rows?run_id=${encodeURIComponent(runId)}` : '/studio/rows'),
   demoRun: () => call<unknown>('POST', '/demo/run'),
 }

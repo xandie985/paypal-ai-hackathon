@@ -29,6 +29,8 @@ const money = (id: string, name: string, description: string): AgFieldDefinition
 
 const fields: AgFieldDefinition[] = [
   text('lineage_id', 'Lineage ID', 'PG-… ID shared by every ledger entry for one purchase'),
+  text('order_id', 'Order ID', 'PayPal order ID'),
+  text('capture_id', 'Capture ID', 'PayPal capture ID'),
   text('vendor', 'Vendor', 'Seller the agent bought from or proposed to buy from'),
   text('category', 'Category', 'Product category from the mandate'),
   text('action', 'Action', 'What the agent proposed (buy or negotiate)'),
@@ -79,7 +81,7 @@ const report: AgReportState = {
         table: {
           type: 'grid',
           format: title('Transactions'),
-          dataMapping: { cols: ['lineage_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
+          dataMapping: { cols: ['lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
         },
       },
       widgetLayout: {
@@ -93,13 +95,13 @@ const report: AgReportState = {
   ],
 }
 
-export default function CommandCenter() {
+export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [rows, setRows] = useState<StudioRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AgStudioMode>('view')
   const load = useCallback(() => {
-    api.studioRows().then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
-  }, [])
+    api.studioRows(runId).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
+  }, [runId])
   useEffect(load, [load])
   const data = useMemo(() => (rows ? toSources(rows) : null), [rows])
 

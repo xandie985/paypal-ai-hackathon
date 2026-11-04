@@ -47,7 +47,7 @@ export default function App() {
       {studio ? (
         <main className="min-h-0 flex-1">
           <Suspense fallback={<p className="m-6 text-sm text-slate-500">Loading Command Center…</p>}>
-            <CommandCenter />
+            <CommandCenter runId={run?.run_id} />
           </Suspense>
         </main>
       ) : (

@@ -31,8 +31,12 @@ def transaction_rows(ledger: EvidenceLedger) -> list[dict]:
                 r["savings"] = str((Decimal(base) - Decimal(prop["unit_price"])) * prop["quantity"])
         elif e.kind == "approval":
             r["approved_by"] = p["approver"]
+        elif e.kind == "seal":
+            r["order_id"] = p.get("order_id", "")
         elif e.kind == "capture":
             r["status"] = "CAPTURED"
+            r["order_id"] = p.get("order_id") or r.get("order_id", "")
+            r["capture_id"] = p.get("capture_id", "")
         elif e.kind == "delivery_proof":
             r["delivery"] = p["verdict"]
         elif e.kind == "reconciliation":
