@@ -366,9 +366,19 @@ def respond(
     elif chosen["via"] == "send_message":
         resp = gateway.dispute_action(case.dispute_id, "send_message", {"message": note[:2000]})
     elif chosen["via"] == "make_offer":
-        resp = gateway.dispute_action(
-            case.dispute_id, "make_offer", {"note": note[:2000], "offer_amount": money, "offer_type": "REFUND_WITH_RETURN"}
-        )
+        body = {
+            "note": note[:2000],
+            "offer_amount": money,
+            "offer_type": "REFUND_WITH_RETURN",
+            "return_shipping_address": {
+                "address_line_1": "100 Innovation Way",
+                "admin_area_2": "San Jose",
+                "admin_area_1": "CA",
+                "postal_code": "95131",
+                "country_code": "US",
+            },
+        }
+        resp = gateway.dispute_action(case.dispute_id, "make_offer", body)
     else:
         resp = gateway.dispute_action(case.dispute_id, "accept_claim", {"note": note[:2000]})
 
