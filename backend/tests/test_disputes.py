@@ -191,6 +191,7 @@ def test_refund_on_return_needs_a_configured_return_address(monkeypatch):
     did = open_case(run_id, mic["lineage_id"], amount="30.00")
     gw = api.disputes_gateway()
     monkeypatch.setattr(settings, "replay_mode", False)  # live rules for the address; the replay gateway stays
+    monkeypatch.setattr(settings, "return_address_line_1", "")
     a = client.get(f"/api/disputes/{did}").json()["assessment"]
     assert "returns address" in a["options"][1]["excluded_by"] and a["recommended"] != "refund_with_return"
     r = client.post(f"/api/disputes/{did}/respond", json={"option": "refund_with_return", "note": "x"})

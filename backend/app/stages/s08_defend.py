@@ -171,6 +171,7 @@ class DisputeCase:
     due_date: str | None
     created: str | None
     actions: list[str] = field(default_factory=list)
+    allowed_offer_types: list[str] = field(default_factory=list)
 
     def as_dispute(self) -> Dispute:
         return Dispute(
@@ -187,6 +188,12 @@ def parse_paypal_dispute(raw: dict) -> DisputeCase:
     because Orders custom_id carries it (core/money.build_purchase_unit)."""
     tx = (raw.get("disputed_transactions") or [{}])[0]
     amt = raw.get("dispute_amount") or {}
+    offer_opts = raw.get("allowed_response_options", {}).get("make_offer", {}).get("offer_types", [])
+    if not offer_opts:
+        if raw.get("reason") == "MERCHANDISE_OR_SERVICE_NOT_RECEIVED":
+            offer_opts = ["REFUND"]
+        else:
+            offer_opts = ["REFUND", "REFUND_WITH_RETURN"]
     return DisputeCase(
         dispute_id=raw["dispute_id"],
         reason=raw.get("reason", "OTHER"),
@@ -202,6 +209,7 @@ def parse_paypal_dispute(raw: dict) -> DisputeCase:
         created=raw.get("create_time"),
         # HATEOAS: only what PayPal lists in links is allowed right now.
         actions=sorted({link["rel"] for link in raw.get("links", []) if link.get("method", "POST") == "POST"}),
+        allowed_offer_types=offer_opts,
     )
 
 
@@ -288,7 +296,9 @@ def assess(
         contest["excluded_by"] = "No sealed record for this payment: we won't contest without evidence."
     elif facts.get("within_return_window") and case.reason == "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED":
         contest["excluded_by"] = f"Inside the sealed {facts['sealed_return_days']}-day return window: honour our own terms."
-    if options[1]["via"] == "make_offer" and not return_address_set:
+    if "REFUND_WITH_RETURN" not in case.allowed_offer_types or case.reason == "MERCHANDISE_OR_SERVICE_NOT_RECEIVED":
+        options[1]["excluded_by"] = "Item not received: buyer cannot return goods that were never delivered."
+    elif options[1]["via"] == "make_offer" and not return_address_set:
         options[1]["excluded_by"] = "No returns address configured (RETURN_ADDRESS_* in .env)."
     if days_left is not None and days_left < 0:
         for o in options:
@@ -381,7 +391,11 @@ def respond(
     elif chosen["via"] == "send_message":
         resp = gateway.dispute_action(case.dispute_id, "send_message", {"message": note[:2000]})
     elif chosen["via"] == "make_offer":
-        body = {"note": note[:2000], "offer_amount": money, "offer_type": "REFUND_WITH_RETURN", "return_shipping_address": return_address}
+        can_return = "REFUND_WITH_RETURN" in case.allowed_offer_types and case.reason != "MERCHANDISE_OR_SERVICE_NOT_RECEIVED"
+        offer_type = "REFUND_WITH_RETURN" if can_return else "REFUND"
+        body = {"note": note[:2000], "offer_amount": money, "offer_type": offer_type}
+        if offer_type == "REFUND_WITH_RETURN":
+            body["return_shipping_address"] = return_address
         resp = gateway.dispute_action(case.dispute_id, "make_offer", body)
     else:
         resp = gateway.dispute_action(case.dispute_id, "accept_claim", {"note": note[:2000]})
