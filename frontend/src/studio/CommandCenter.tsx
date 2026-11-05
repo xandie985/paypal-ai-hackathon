@@ -27,7 +27,19 @@ const money = (id: string, name: string, description: string): AgFieldDefinition
   formatOptions: { format: usd },
 })
 
+const when = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'medium' })
+const datetime = (id: string, name: string, description: string): AgFieldDefinition => ({
+  id,
+  name,
+  description,
+  format: 'dateTimeFormat',
+  formatOptions: { format: when },
+})
+const DATES = ['created_at', 'updated_at'] as const
+
 const fields: AgFieldDefinition[] = [
+  datetime('created_at', 'Time', 'When the agent first proposed this purchase (sealed ledger time, shown in your time zone)'),
+  datetime('updated_at', 'Last update', 'Time of the latest ledger entry for this purchase (approval, capture, dispute…)'),
   text('lineage_id', 'Lineage ID', 'PG-… ID shared by every ledger entry for one purchase'),
   text('order_id', 'Order ID', 'PayPal order ID'),
   text('capture_id', 'Capture ID', 'PayPal capture ID'),
@@ -51,10 +63,13 @@ const MONEY = ['amount', 'savings', 'payout_net'] as const
 
 function toSources(rows: StudioRow[]): AgDataSourcesDefinition {
   const data = rows.map((r) => {
-    const out: Record<string, string | number | null> = { ...r }
+    const out: Record<string, string | number | Date | null> = { ...r }
     for (const k of MONEY) out[k] = r[k] == null ? null : Number(r[k])
     return out
   })
+  // Newest first, so the table grows from the top (the backend already sorts; keep it if rows are merged).
+  data.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+  for (const row of data) for (const k of DATES) row[k] = row[k] ? new Date(String(row[k])) : null
   return {
     description: 'PactGuard AI procurement runs: one row per purchase, built from the hash-chained evidence ledger.',
     sources: [{ id: 'transactions', name: 'Transactions', description: 'One row per purchase lineage', data, fields }],
@@ -81,7 +96,8 @@ const report: AgReportState = {
         table: {
           type: 'grid',
           format: title('Transactions'),
-          dataMapping: { cols: ['lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
+          dataMapping: { cols: ['created_at', 'lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
+          sort: [{ field: { id: f('created_at') }, direction: 'desc' }], // newest purchase on top
         },
       },
       widgetLayout: {

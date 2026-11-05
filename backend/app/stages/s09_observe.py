@@ -15,6 +15,9 @@ def transaction_rows(ledger: EvidenceLedger, lineage_prefix: str | None = None) 
             continue
         r = by_lid[e.lineage_id]
         r["lineage_id"] = e.lineage_id
+        # Ledger timestamps are UTC ISO-8601 and sealed into the hash chain, so they can't be edited later.
+        r.setdefault("created_at", e.created_at)
+        r["updated_at"] = e.created_at
         p = e.payload
         if e.kind == "decision":
             prop = p["proposal"]
@@ -48,7 +51,8 @@ def transaction_rows(ledger: EvidenceLedger, lineage_prefix: str | None = None) 
             r["dispute_win_odds"] = p["win_odds"]
         elif e.kind == "dispute_outcome":
             r["dispute_outcome"] = p["outcome"]
-    return list(by_lid.values())
+    # Newest purchase first, so the table grows from the top.
+    return sorted(by_lid.values(), key=lambda r: r["created_at"], reverse=True)
 
 
 def kpis(rows: list[dict]) -> dict:

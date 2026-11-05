@@ -101,6 +101,8 @@ export type LedgerView = { chain_ok: boolean; first_bad_seq: number | null; entr
 // One row per purchase lineage from GET /api/studio/rows. Money arrives as decimal strings.
 export type StudioRow = {
   lineage_id: string
+  created_at: string // ISO-8601 UTC from the ledger
+  updated_at: string
   order_id?: string
   capture_id?: string
   vendor?: string

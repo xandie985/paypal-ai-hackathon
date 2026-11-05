@@ -190,3 +190,14 @@ def test_same_mandate_twice_gets_distinct_lineages_and_request_ids():
     assert r["same_order"] is True
     entry = runs.RUNS[a["run_id"]].rt.ledger.entries(a["mandate_lineage"], "mandate")[0].payload
     assert entry["delegation_id"] == a["run_id"]
+
+
+def test_studio_rows_carry_timestamps_newest_first(run):
+    snap, _ = run
+    rows = client.get("/api/studio/rows", params={"run_id": snap["run_id"]}).json()["rows"]
+    assert all(r["created_at"] <= r["updated_at"] for r in rows)
+    created = [r["created_at"] for r in rows]
+    assert created == sorted(created, reverse=True)
+    # The last item governed is the first row.
+    last = max(snap["items"], key=lambda i: [r["created_at"] for r in rows if r["lineage_id"] == i["lineage_id"]][0])
+    assert rows[0]["lineage_id"] == last["lineage_id"]
