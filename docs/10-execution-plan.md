@@ -319,15 +319,27 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
   - `PAYMENT.PAYOUTSBATCH.*`: payout status.
 - Register the Render URL (Phase 4), or a local tunnel for now, as the sandbox webhook. That gives the `PAYPAL_WEBHOOK_ID`.
 
-#### 3b. Defend (pain points #3, #4, #5)
-- **Dispute → lineage lookup.** A dispute's disputed transaction carries the seller's transaction (capture) ID. Ledger `capture` entries store `capture_id`. Add a lookup from capture ID to lineage. Check the exact field name on the real sandbox dispute from B-4.
-- **Endpoints:**
-  - `GET /api/disputes` returns the triage queue (`s08_defend.triage`).
-  - `GET /api/disputes/{id}/evidence` returns the bundle and a PDF preview.
-  - `POST /api/disputes/{id}/submit` calls `s08_defend.submit`. The default is a human click (D-4).
-- **`INVALID_EVIDENCE_FILE` (SO #78902643).** Test the multipart shape early against the real dispute: the `input` JSON part, `file1` as `application/pdf`, size limits. `provide-evidence` is only accepted in certain dispute states, so watch the B-4 dispute's status.
-- **Optional LLM narrative.** `llm.text` drafts the `notes` field from ledger records only. The deterministic template stays as the fallback. The 2,000-character cap is already enforced.
-- **UI `features/disputes/DisputeCard.tsx`** (doc 11, UI-3.x): reason, deadline, win odds, the sealed terms hash, delivery verdict, "chain verified", missing records, and a Submit button.
+#### 3b. Defend (pain points #3, #4, #5) — COMPLETED & VERIFIED (2026-11-05)
+- **Dispute → Lineage Lookup:** Matched primarily via `disputed_transactions[].custom` (the Orders v2 lineage thread), falling back to `seller_transaction_id` (`capture_id`) in the sealed ledger.
+- **8 Deterministic Reason Playbooks (`s08_defend.PLAYBOOKS`):**
+  1. *Item Not Received:* Contests if Stage 5 tracking proves delivery (≥85% win odds, +$23 EV); shares tracking if in transit; refunds if unverified. Never demands return of undelivered goods.
+  2. *Not As Described:* Enforces sealed return window; defect claims cap odds at 35% and recommend `refund_with_return` with `return_shipping_address` attached.
+  3. *Duplicate Charge:* Scans mandate ledger within 48h; refunds duplicates or contests single capture via deterministic `PayPal-Request-Id`.
+  4. *Incorrect Amount:* Refunds overcharge difference only or contests exact penny-exact match.
+  5. *Refund Not Processed:* Honours prior sealed refund commitments.
+  6. *Unauthorised:* Flags security review; contests only with both delivery proof and human approval.
+  7. *Recurring / Other Means:* Single capture contests; multiple captures surrender.
+  8. *Unknown:* Routes to manual review.
+- **Stage-Aware Fee Modeling:** Handling cost scales with risk: **$15** (Inquiry) → **$20** (Chargeback) → **$25** (Arbitration).
+- **Carrier Tracking Endpoint (`POST /api/deliveries`):** Seals live carrier tracking (`carrier`, `tracking_number`, `status: DELIVERED`) into `ledger.db` for live sandbox orders, enabling `PROOF_OF_FULFILLMENT`.
+- **Outcome Sync to Stage 10:** PayPal claim verdicts (`dispute_outcome`) are recorded as `WON` / `LOST`, updating supplier reliability scores.
+- **Endpoints & UI:**
+  - `GET /api/disputes` returns active dispute queue with local-time timeline.
+  - `GET /api/disputes/{id}` returns assessment, drafts, and facts.
+  - `GET /api/disputes/{id}/brief.pdf` generates cryptographic legal PDF evidence brief via ReportLab.
+  - `POST /api/disputes/{id}/respond` sends `provide-evidence`, `make-offer`, `send-message`, or `accept-claim` with human confirmation (D-4).
+  - `POST /api/deliveries` records live carrier tracking proofs.
+  - UI `DisputeDesk.tsx` in Mission Control shows timeline, EV cards, draft editor with optional Claude polish, and 1-click submit.
 
 #### 3c. Pay out (pain point #7)
 - If B-2 passed, `release_payout` runs against sandbox Payouts. `sender_batch_id` is lineage-derived, and PayPal rejects a reused one, which adds a second layer of idempotency.
