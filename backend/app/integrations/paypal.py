@@ -19,6 +19,12 @@ from typing import Protocol
 import httpx
 
 
+def _now() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
 class PayPalAPIError(Exception):
     """A non-2xx PayPal response, keeping the fields support asks for (name, debug_id, details)."""
 
@@ -160,13 +166,20 @@ class ReplayPayPal:
             "disputed_transactions": [{"custom": lineage_id, "seller_transaction_id": capture_id, "item_name": item_name, "notes": note}],
             "messages": [],
             "links": [
-                {"rel": r, "method": "POST", "href": f"/v1/customer/disputes/{did}/{r.replace('_', '-')}"} for r in self.STAGE_LINKS[stage]
+                {"rel": r, "method": "POST", "href": f"/v1/customer/disputes/{did}/{r.replace('_', '-')}"}
+                for r in self.STAGE_LINKS.get(stage, self.STAGE_LINKS["INQUIRY"])
             ],
         }
         return self.disputes[did]
 
     def list_disputes(self):
         return [{k: d[k] for k in ("dispute_id", "reason", "status", "dispute_amount", "create_time")} for d in self.disputes.values()]
+
+    def resolve_dispute(self, dispute_id, outcome_code):
+        """Replay only: what PayPal does when it closes a case."""
+        d = self.get_dispute(dispute_id)
+        d.update(status="RESOLVED", links=[], update_time=_now(), dispute_outcome={"outcome_code": outcome_code})
+        return d
 
     def get_dispute(self, dispute_id):
         if dispute_id not in self.disputes:
@@ -180,8 +193,9 @@ class ReplayPayPal:
                 422, "UNPROCESSABLE_ENTITY", f"{action} not allowed in {d['status']}", details=[{"issue": "ACTION_NOT_ALLOWED"}]
             )
         self.calls.append((action, dispute_id))
+        d["update_time"] = _now()
         if action == "send_message":
-            d["messages"].append({"posted_by": "SELLER", "content": body["message"]})
+            d["messages"].append({"posted_by": "SELLER", "time_posted": d["update_time"], "content": body["message"]})
         elif action == "make_offer":
             if body.get("offer_type") == "REFUND_WITH_RETURN" and not body.get("return_shipping_address"):
                 self.calls.pop()  # PayPal rejects it, so nothing happened
@@ -192,6 +206,7 @@ class ReplayPayPal:
             d["links"] = [link for link in d["links"] if link["rel"] == "send_message"]
         elif action == "accept_claim":
             d["status"], d["links"] = "RESOLVED", []
+            d["dispute_outcome"] = {"outcome_code": "RESOLVED_BUYER_FAVOUR"}
         return {"links": [{"rel": "self", "href": f"/v1/customer/disputes/{dispute_id}"}]}
 
     def verify_webhook(self, headers, body):

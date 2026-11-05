@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
@@ -12,11 +12,11 @@ from . import runs
 from .config import settings
 from .core.errors import GuardViolation
 from .core.ledger import EvidenceLedger, open_ledger
-from .domain.models import Mandate
+from .domain.models import DeliveryReport, Mandate
 from .integrations.llm import make_llm
 from .integrations.paypal import PayPalAPIError, make_gateway
 from .orchestrator import Runtime, run_demo
-from .stages import s08_defend
+from .stages import s05_verify, s08_defend
 from .stages.s09_observe import kpis, transaction_rows
 
 router = APIRouter(prefix="/api")
@@ -236,6 +236,8 @@ def _case(dispute_id: str):
         raise HTTPException(404 if e.status == 404 else 502, e.to_dict()) from e
     case = s08_defend.parse_paypal_dispute(raw)
     ledger, lineage = s08_defend.locate(case, evidence_ledgers())
+    if ledger and lineage:
+        s08_defend.sync_outcome(ledger, case, lineage)  # a resolved case teaches stage 10, once
     return case, ledger, lineage, s08_defend.assess(case, ledger, lineage, date.today(), return_address_set=bool(settings.return_address))
 
 
@@ -265,6 +267,9 @@ def list_disputes():
                 "win_odds": a["win_odds"],
                 "days_left": a["days_left"],
                 "lineage_found": a["facts"]["lineage_found"],
+                "reason_label": a["reason_label"],
+                "state_note": a["state_note"],
+                "flags": a["flags"],
             }
         )
     return sorted(out, key=lambda r: (r["days_left"] is None, r["days_left"] or 0))
@@ -274,7 +279,7 @@ def list_disputes():
 def get_dispute(dispute_id: str):
     case, _, _, a = _case(dispute_id)
     drafts = {o["option"]: s08_defend.draft_reply(case, a, o["option"]) for o in a["options"]}
-    return _dec({"case": _case_json(case), "assessment": a, "drafts": drafts})
+    return _dec({"case": _case_json(case), "assessment": a, "drafts": drafts, "timeline": s08_defend.timeline(case, a)})
 
 
 class DraftBody(BaseModel):
@@ -303,7 +308,7 @@ def dispute_brief(dispute_id: str):
     case, ledger, lineage, _ = _case(dispute_id)
     if not ledger:
         raise HTTPException(404, "no sealed record for this dispute, so there is no evidence brief")
-    d = case.as_dispute().model_copy(update={"lineage_id": lineage})
+    d = case.as_dispute(lineage)
     pdf = s08_defend.render_pdf(d, s08_defend.build_evidence(ledger, d))
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{dispute_id}-brief.pdf"'})
 
@@ -339,6 +344,7 @@ class SimulateDispute(BaseModel):
     reason: str = "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED"
     note: str = "its not working now. it was working fine and then it stopped. it seems i will have to return it"
     amount: str | None = None
+    stage: str = "INQUIRY"
 
 
 @router.post("/runs/{run_id}/disputes/simulate")
@@ -356,7 +362,47 @@ def simulate_dispute(run_id: str, body: SimulateDispute):
         reason=body.reason,
         note=body.note,
         item_name=item.title,
+        stage=body.stage,
         due=(date.today() + timedelta(days=10)).isoformat(),
-        created=f"{date.today().isoformat()}T09:00:00Z",
+        created=datetime.now(UTC).isoformat(),
     )
     return {"dispute_id": d["dispute_id"]}
+
+
+class SimulateResolve(BaseModel):
+    outcome_code: str = "RESOLVED_SELLER_FAVOUR"
+
+
+@router.post("/disputes/{dispute_id}/simulate-resolve")
+def simulate_resolve(dispute_id: str, body: SimulateResolve):
+    """Replay only: PayPal closes the case, so the outcome sync (and stage 10) can be shown end to end."""
+    if not settings.replay_mode:
+        raise HTTPException(409, "live mode: PayPal resolves disputes")
+    try:
+        disputes_gateway().resolve_dispute(dispute_id, body.outcome_code)
+    except PayPalAPIError as e:
+        raise HTTPException(404, e.to_dict()) from e
+    case, _, _, a = _case(dispute_id)
+    return _dec({"case": _case_json(case), "assessment": a})
+
+
+class DeliveryBody(BaseModel):
+    lineage_id: str
+    carrier: str
+    tracking_number: str
+    tracking_status: str  # DELIVERED | IN_TRANSIT | LOST | NONE
+    delivered_on: str | None = None
+    due_by: str
+
+
+@router.post("/deliveries")
+def record_delivery(body: DeliveryBody):
+    """Stage 5 for any sealed purchase, live or replay: carrier tracking becomes sealed delivery proof
+    that stage 8 can cite. The VERIFIED gate token stays on the server."""
+    ledger = next((led for led in evidence_ledgers() if led.latest(body.lineage_id, "seal")), None)
+    if ledger is None:
+        raise HTTPException(404, "no sealed purchase with that lineage")
+    seal = ledger.latest(body.lineage_id, "seal")
+    report = _guarded(lambda: DeliveryReport(**body.model_dump(exclude={"lineage_id"})))
+    out = s05_verify.verify_delivery(ledger, settings.gate_secret, body.lineage_id, seal.payload["order_id"], report)
+    return {"verdict": out["verdict"], "problems": out["problems"]}

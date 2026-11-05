@@ -146,11 +146,16 @@ export type DisputeCase = {
   item_name: string
   buyer_note: string
   due_date: string | null
+  created: string | null
+  updated: string | null
   actions: string[]
+  messages: { posted_by: string; time_posted: string | null; content: string }[]
+  outcome: string | null
 }
 export type DisputeOption = {
-  option: 'contest' | 'refund_with_return' | 'accept'
+  option: 'contest' | 'inform' | 'partial_refund' | 'refund_with_return' | 'accept'
   via: string
+  amount?: string
   ev: string
   basis: string
   available: boolean
@@ -162,11 +167,33 @@ export type DisputeAssessment = {
   win_odds: number
   days_left: number | null
   recommended: DisputeOption['option'] | null
+  reason_label: string
+  playbook: string | null
+  state_note: string | null
+  flags: string[]
   options: DisputeOption[]
   facts: Record<string, unknown> & { lineage_found: boolean; claim: string }
 }
-export type DisputeSummary = { case: DisputeCase; recommended: string | null; win_odds: number; days_left: number | null; lineage_found: boolean }
-export type DisputeDetail = { case: DisputeCase; assessment: DisputeAssessment; drafts: Record<string, string> }
+export type DisputeSummary = {
+  case: DisputeCase
+  recommended: string | null
+  win_odds: number
+  days_left: number | null
+  lineage_found: boolean
+  reason_label: string
+  state_note: string | null
+  flags: string[]
+}
+export type DisputeEvent = { at: string; who: string; what: string }
+export type DisputeDetail = { case: DisputeCase; assessment: DisputeAssessment; drafts: Record<string, string>; timeline: DisputeEvent[] }
+export type DeliveryInput = {
+  lineage_id: string
+  carrier: string
+  tracking_number: string
+  tracking_status: 'DELIVERED' | 'IN_TRANSIT' | 'LOST' | 'NONE'
+  delivered_on?: string
+  due_by: string
+}
 
 // Guards come back as 409 with {guard, message}; surface the guard's name to the UI.
 export class ApiError extends Error {
@@ -212,7 +239,9 @@ export const api = {
   draftDispute: (id: string, option: string) => call<{ text: string; source: string }>('POST', `/disputes/${id}/draft`, { option }),
   respondDispute: (id: string, option: string, note: string) =>
     call<{ case: DisputeCase; assessment: DisputeAssessment }>('POST', `/disputes/${id}/respond`, { option, note }),
-  simulateDispute: (runId: string, lineage_id: string, amount?: string) =>
-    call<{ dispute_id: string }>('POST', `${base(runId)}/disputes/simulate`, { lineage_id, amount }),
+  simulateDispute: (runId: string, lineage_id: string, reason: string, note: string) =>
+    call<{ dispute_id: string }>('POST', `${base(runId)}/disputes/simulate`, { lineage_id, reason, note }),
+  simulateResolve: (id: string, outcome_code: string) => call<unknown>('POST', `/disputes/${id}/simulate-resolve`, { outcome_code }),
+  recordDelivery: (d: DeliveryInput) => call<{ verdict: string; problems: string[] }>('POST', '/deliveries', d),
   briefUrl: (id: string) => `/api/disputes/${id}/brief.pdf`,
 }

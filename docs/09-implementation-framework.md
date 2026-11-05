@@ -321,6 +321,30 @@ A PayPal dispute is answered rationally from records sealed before it existed. A
   - A direct schema probe of `accept-claim` was accepted (HTTP 200) and moved `PP-R-EGO-10196439` to `RESOLVED`.
   - The corrected `make-offer` body uses `REFUND_WITH_RETURN` + `return_shipping_address` for defect/not-as-described claims, and `offer_type: "REFUND"` for item-not-received claims.
 
+### Stage 8 playbooks and case lifecycle (2026-11-05)
+
+`s08_defend.PLAYBOOKS` maps every PayPal dispute reason to the evidence it needs, a ledger check and the responses that make sense. `tests/test_dispute_playbooks.py` has one test per scenario.
+
+| Reason | Ledger check | Recommends |
+|---|---|---|
+| Item not received | Carrier tracking in a `delivery_proof` entry | **Contest** with `PROOF_OF_FULFILLMENT` if delivered (odds ≥ 85%). **Share tracking and wait** if in transit and not late; refunding is then blocked. Otherwise **refund**. Never refund-with-return. |
+| Not as described | Sealed return window, buyer's note | Never contest inside our own window; a defect claim caps odds at 35%, so a **refund on return** usually wins. |
+| Duplicate charge | Another capture, same vendor and amount, within 48 h, anywhere in the mandate | Found → **refund** (contest blocked). One capture only → **contest** (the deterministic PayPal-Request-Id proves one order). |
+| Incorrect amount | Captured vs sealed amount | Captured more → **refund the overcharge** only (`make-offer` `REFUND` for the difference). Equal → **contest** from the penny-exact seal. |
+| Refund not processed | Any earlier refund commitment on this purchase | Committed → honour it (contest blocked). |
+| Unauthorised | Delivery proof and human approval | Flagged for security review; contest only with both. |
+| Recurring billing / paid by other means | Captures on this purchase | One capture → **contest**; more → no contest. |
+| Anything else | — | No automatic recommendation: manual review. |
+
+- **Case state.** Only `WAITING_FOR_SELLER_RESPONSE` gets a recommendation. Waiting on the buyer, under PayPal review, and resolved are shown as such.
+- **Costs by stage.** The handling cost rises from $15 (inquiry) to $20 (chargeback) and $25 (arbitration). These are labelled estimates.
+- **Flags.** A purchase disputed before, a disputed amount above the captured amount, a duplicate capture, and possible account compromise.
+- **Outcome learning.** When PayPal resolves a case, its `dispute_outcome.outcome_code` is recorded once as WON or LOST (`sync_outcome`) for stage 10's supplier trust.
+- **Delivery proof in live mode.** `POST /api/deliveries` seals carrier tracking for any purchase, so the item-not-received contest path works live, not only in replay. The VERIFIED gate token never leaves the server.
+- **Timestamps.** The desk lists when each case was opened and its respond-by date. Each case has a timeline in the viewer's time zone: purchase sealed, dispute opened, messages, our responses with the approver, and the outcome.
+- **Replay.** The desk can simulate each reason on any settled item, and PayPal's decision (we win / buyer wins).
+- **Fixed:** the refund-with-return exclusion now says "PayPal doesn't allow a refund-with-return offer on this case" when PayPal leaves it out. The "Item not received" wording now appears only on item-not-received cases, where that option isn't offered at all.
+
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.
 * **PactGuard AI 3-Layer Governance:**
