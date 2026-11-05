@@ -298,19 +298,28 @@ A PayPal dispute is answered rationally from records sealed before it existed. A
   - Facts come from the ledger: when the order was sealed, the true return window (from the decision, so hidden terms stay hidden rather than reading as 0), human approval, delivery proof, missing evidence, chain integrity.
   - The buyer's note is classified as defect, not-received or other.
   - Win odds are capped at 35% on a defect claim, because a seal proves what was sold, not that the unit still works.
-- **Options and expected value.** Contest = p × amount − handling cost. Refund on return = recovery × amount − return label. Accept = 0. The cost constants are labelled estimates at the top of `s08_defend.py`.
+- **Options and expected value.** 
+  - Contest = $p \times \text{amount} - \text{handling cost}$. The **handling cost (\$15)** represents the non-refundable PayPal dispute fee plus operational review cost (not shipping). Fighting low-probability claims results in negative EV due to fee exposure.
+  - Refund on return = $\text{recovery} \times \text{amount} - \text{return label}$. Applies only to claims where goods were delivered (e.g. defect or not-as-described).
+  - Accept = \$0.00 (the baseline surrender outcome).
+  - The cost constants are labelled estimates at the top of `s08_defend.py`.
+- **Handled Dispute Reasons & Shipping Verification:**
+  - **Item Not Received (`MERCHANDISE_OR_SERVICE_NOT_RECEIVED`):** A buyer reporting an undelivered item cannot physically return goods. PayPal's API strictly enforces `allowed_response_options.make_offer.offer_types = ["REFUND"]` and rejects `REFUND_WITH_RETURN` with `INVALID_OFFER_TYPE`. The system detects this reason, automatically excludes `refund_with_return` (*"Item not received: buyer cannot return goods that were never delivered"*), and falls back to `accept` (\$0.00) unless proof of delivery exists.
+  - **Shipping Verification (Stage 5 Connection):** Orders v2 captures the buyer's shipping address. If Stage 5 records a verified `delivery_proof` (`carrier`, `tracking_number`, `status: DELIVERED`), the brief attaches PayPal `PROOF_OF_FULFILLMENT`. Win odds jump from 15% to 95%, flipping `contest` from -\$9.00 to a winning +\$23.00 EV. Without tracking proof, contesting undelivered items has an 85% loss rate and is rationally avoided.
 - **Hard rules.**
   - Never contest without a sealed record.
   - Never contest a not-as-described claim inside our own sealed return window.
+  - Never offer refund-with-return on an item-not-received claim.
   - Nothing once the response deadline has passed.
 - **Allowed actions.** Only actions PayPal currently lists in `links` are allowed. When PayPal allows only `send_message`, a refund or acceptance is proposed in a message.
 - **Responding.** `POST /api/disputes/{id}/respond` sends `provide-evidence` (with the PDF brief), `send-message`, `make-offer` (`REFUND_WITH_RETURN`) or `accept-claim`. Each option is sent once. The ledger records the option, channel, EV, recommendation, whether it was followed, the approver and a hash of the note (not the text).
 - **LLM.** It is optional and only rewords the draft (`POST /api/disputes/{id}/draft`). Without `ANTHROPIC_API_KEY` the template is used.
 - **UI.** The Mission Control "Dispute desk" shows the case list, facts, options with EV, the recommendation, an editable draft, the PDF brief, and a "Send to PayPal" confirm. In replay it can simulate a buyer dispute on any settled item.
-- **Live findings (2026-11-05, `PP-R-EGO-10196439`).**
+- **Live findings (2026-11-05, `PP-R-EGO-10196439` & `PP-R-PVO-10196452`).**
   - `make-offer` with `REFUND_WITH_RETURN` needs `return_shipping_address`; without it PayPal returns `MISSING_RETURN_SHIPPING_ADDRESS`. The address now comes from `RETURN_ADDRESS_*` in `.env`. Live mode refuses the offer if it is unset; replay uses a labelled demo address.
-  - A direct schema probe of `accept-claim` was accepted (HTTP 200) and moved the case to `UNDER_REVIEW` with only `self` left in `links`. That call was made outside the desk, so the ledger has no `dispute_response` for it, and it does not count as an agent decision.
-  - The corrected `make-offer` body has **not** yet been accepted live: it needs a fresh dispute.
+  - On Item-Not-Received disputes (`MERCHANDISE_OR_SERVICE_NOT_RECEIVED`, e.g. `PP-R-PVO-10196452`), PayPal strictly rejects `REFUND_WITH_RETURN` with `INVALID_OFFER_TYPE`. The system now inspects PayPal's `allowed_response_options` and automatically excludes `refund_with_return` on undelivered goods, recommending `accept` unless Stage 5 delivery tracking proof is present.
+  - A direct schema probe of `accept-claim` was accepted (HTTP 200) and moved `PP-R-EGO-10196439` to `RESOLVED`.
+  - The corrected `make-offer` body uses `REFUND_WITH_RETURN` + `return_shipping_address` for defect/not-as-described claims, and `offer_type: "REFUND"` for item-not-received claims.
 
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.

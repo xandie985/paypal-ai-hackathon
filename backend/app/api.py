@@ -108,6 +108,13 @@ async def start_run(body: StartRun | None = None):
     return run.snapshot()
 
 
+@router.get("/runs/latest")
+def get_latest_run():
+    if not runs.RUNS:
+        raise HTTPException(404, "no active runs")
+    return list(runs.RUNS.values())[-1].snapshot()
+
+
 @router.get("/runs/{run_id}")
 def get_run(run_id: str):
     return _run(run_id).snapshot()
