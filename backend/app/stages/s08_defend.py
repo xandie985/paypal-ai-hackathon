@@ -582,6 +582,19 @@ def draft_reply(case: DisputeCase, assessment: dict, option: str) -> str:
     return f"Hello, we're sorry for the trouble. {sealed}. We are refunding {case.amount} {case.currency} in full."
 
 
+def offer_body(case: DisputeCase, amount: Decimal, note: str, return_address: dict | None = None) -> dict:
+    """POST /make-offer body. With a return address it's REFUND_WITH_RETURN; without, a money-only REFUND,
+    which is also how a partial refund (amount below the disputed amount) goes out."""
+    body = {
+        "note": note[:2000],
+        "offer_amount": {"currency_code": case.currency, "value": format(q(amount), "f")},
+        "offer_type": "REFUND_WITH_RETURN" if return_address else "REFUND",
+    }
+    if return_address:
+        body["return_shipping_address"] = return_address
+    return body
+
+
 def respond(
     gateway: PayPalGateway,
     ledger: EvidenceLedger,
@@ -613,7 +626,6 @@ def respond(
         raise DisputeAlreadyAnswered(f"{option} already sent for {case.dispute_id}", dispute_id=case.dispute_id)
 
     amount = Decimal(chosen.get("amount", case.amount))
-    money = {"currency_code": case.currency, "value": format(q(amount), "f")}
     book = PLAYBOOKS.get(case.reason)
     if chosen["via"] == "provide_evidence":
         d = case.as_dispute(lid)
@@ -628,10 +640,7 @@ def respond(
     elif chosen["via"] == "send_message":
         resp = gateway.dispute_action(case.dispute_id, "send_message", {"message": note[:2000]})
     elif chosen["via"] == "make_offer":
-        body = {"note": note[:2000], "offer_amount": money, "offer_type": "REFUND_WITH_RETURN" if can_return else "REFUND"}
-        if can_return:
-            body["return_shipping_address"] = return_address
-        resp = gateway.dispute_action(case.dispute_id, "make_offer", body)
+        resp = gateway.dispute_action(case.dispute_id, "make_offer", offer_body(case, amount, note, return_address if can_return else None))
     else:
         resp = gateway.dispute_action(case.dispute_id, "accept_claim", {"note": note[:2000]})
 
