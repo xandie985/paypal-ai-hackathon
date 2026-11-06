@@ -386,6 +386,14 @@ The first dispute taken from open to closed live, through the desk, on order `6A
 | **Next: Phase 2** (doc 10 §4) | Seeded history through the real step functions, `test_studio_row_columns_are_stable`, three custom Studio widgets, the lineage timeline from a grid row, the mandate v1 → v2 diff. The Studio rows already carry `order_id`, `capture_id`, `created_at`, `updated_at`, `dispute_win_odds` and `dispute_outcome`. |
 | Phase 2 progress (2026-11-06) | Seeded history (`app/seed.py`, 30 mandates through the real step functions) and the frozen Studio row contract are done; see doc 10 Phase 2. Carried-forward items are tracked in doc 10 §6 Backlog. |
 
+### ⚠️ Test isolation fix (2026-11-06)
+
+Before this fix, `pytest` wrote to the real persistent ledger. Tests that switch to live rules (for example, the saved-wallet test in `tests/test_paypal_sandbox.py`) start runs that append to `LEDGER_PATH`, which defaults to `./ledger.db`, the same file that holds live sandbox evidence. Each test run added about 120 rows of fake purchases.
+
+`tests/conftest.py` now points `LEDGER_PATH` at a throwaway temp directory before the app is imported, and `tests/test_isolation.py` asserts it.
+
+**If you ran the tests from `backend/` with a live ledger in place, that `ledger.db` contains test runs mixed with real evidence.** The ledger is append-only, so they can't be removed in place. Either keep the file and note it here (lineages from test runs are visible in `GET /api/ledger`), or start a fresh ledger file for the next live run.
+
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.
 * **PactGuard AI 3-Layer Governance:**

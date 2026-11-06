@@ -4,6 +4,8 @@ import {
   enableStudioDevValidations,
   type AgDataSourcesDefinition,
   type AgFieldDefinition,
+  type AgFilterOperator,
+  type AgFilterState,
   type AgReportState,
   type AgStudioMode,
 } from 'ag-studio'
@@ -37,6 +39,15 @@ const datetime = (id: string, name: string, description: string): AgFieldDefinit
 })
 const DATES = ['created_at', 'updated_at'] as const
 
+const pctFmt = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 0 })
+const percent = (id: string, name: string, description: string): AgFieldDefinition => ({
+  id,
+  name,
+  description,
+  format: 'percentageFormat',
+  formatOptions: { format: pctFmt },
+})
+
 const fields: AgFieldDefinition[] = [
   datetime('created_at', 'Time', 'When the agent first proposed this purchase (sealed ledger time, shown in your time zone)'),
   datetime('updated_at', 'Last update', 'Time of the latest ledger entry for this purchase (approval, capture, dispute…)'),
@@ -58,6 +69,8 @@ const fields: AgFieldDefinition[] = [
   money('payout_net', 'Payout net', 'Net amount paid out to the supplier'),
   text('dispute_outcome', 'Dispute', 'WON, LOST (contested and lost) or SETTLED (we offered the refund)'),
   text('blocked_reasons', 'Blocked reasons', 'Why the firewall blocked the purchase'),
+  percent('supplier_trust', 'Supplier trust', 'Stage 10 score per vendor (0-100%): delivery PASS and disputes WON raise it; failed or late deliveries and LOST or SETTLED disputes lower it. A new supplier starts at 67%.'),
+  percent('dispute_win_odds', 'Dispute win odds', 'The desk\'s estimated odds when it answered this purchase\'s dispute'),
 ]
 
 const MONEY = ['amount', 'savings', 'payout_net'] as const
@@ -78,7 +91,11 @@ function toSources(rows: StudioRow[]): AgDataSourcesDefinition {
 }
 
 const title = (t: string) => ({ title: { text: t, enabled: true } })
+// Charts split by a legend field need the legend, or the colours mean nothing.
+const withLegend = (t: string) => ({ ...title(t), style: { theme: { common: { legend: { enabled: true, position: 'bottom' as const } } } } })
+const CAPTURED = { operator: 'equals' as const, value: 'CAPTURED' }
 const f = (id: string) => `transactions.${id}`
+const only = (id: string, model: { operator: AgFilterOperator; value?: unknown }): AgFilterState[] => [{ field: { id: f(id) }, model }]
 
 const report: AgReportState = {
   selectedPageId: 'overview',
@@ -86,27 +103,61 @@ const report: AgReportState = {
     {
       id: 'overview',
       widgets: {
-        spend: { type: 'value', format: title('Proposed spend'), dataMapping: { value: [{ id: f('amount'), aggregation: 'sum' }] } },
-        savings: { type: 'value', format: title('Savings vs retail'), dataMapping: { value: [{ id: f('savings'), aggregation: 'sum' }] } },
+        spend: { type: 'value', format: title('Captured spend'), dataMapping: { value: [{ id: f('amount'), aggregation: 'sum' }] } },
+        savings: { type: 'value', format: title('Saved vs retail (captured)'), dataMapping: { value: [{ id: f('savings'), aggregation: 'sum' }] } },
         count: { type: 'value', format: title('Purchases'), dataMapping: { value: [{ id: f('lineage_id'), aggregation: 'count' }] } },
-        routes: {
-          type: 'donut-chart',
-          format: title('Firewall routes'),
-          dataMapping: { categoryKey: [{ id: f('route') }], valueKey: [{ id: f('lineage_id'), aggregation: 'count' }] },
+        blocked: { type: 'value', format: title('Blocked by the firewall'), dataMapping: { value: [{ id: f('lineage_id'), aggregation: 'count' }] } },
+        // Widget 1: what negotiation and discovery saved, by vendor, split by category. Only captured purchases:
+        // blocked and rejected proposals never happened.
+        savingsByVendor: {
+          type: 'column-chart-grouped',
+          format: withLegend('Saved vs retail, by vendor and category'),
+          dataMapping: { categoryKey: [{ id: f('vendor') }], legendKey: [{ id: f('category') }], valueKey: [{ id: f('savings'), aggregation: 'sum' }] },
+        },
+        // Widget 2: the firewall's decisions over time.
+        routesOverTime: {
+          type: 'column-chart-stacked',
+          format: withLegend('Firewall routes by week'),
+          dataMapping: { categoryKey: [{ id: `${f('created_at')}::week` }], legendKey: [{ id: f('route') }], valueKey: [{ id: f('lineage_id'), aggregation: 'count' }] },
+        },
+        // Widget 3: how disputes ended per supplier, next to the trust score stage 10 learns from them.
+        disputes: {
+          type: 'bar-chart-stacked',
+          format: withLegend('Dispute outcomes by supplier'),
+          dataMapping: { categoryKey: [{ id: f('vendor') }], legendKey: [{ id: f('dispute_outcome') }], valueKey: [{ id: f('lineage_id'), aggregation: 'count' }] },
+        },
+        trust: {
+          type: 'bar-chart-grouped',
+          format: title('Supplier trust (stage 10)'),
+          dataMapping: { categoryKey: [{ id: f('vendor') }], valueKey: [{ id: f('supplier_trust'), aggregation: 'avg' }] },
         },
         table: {
           type: 'grid',
           format: title('Transactions'),
-          dataMapping: { cols: ['created_at', 'source', 'lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
+          dataMapping: { cols: ['created_at', 'source', 'lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'dispute_outcome', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
           sort: [{ field: { id: f('created_at') }, direction: 'desc' }], // newest purchase on top
         },
       },
+      filter: {
+        widget: {
+          spend: only('status', CAPTURED),
+          savings: only('status', CAPTURED),
+          blocked: only('route', { operator: 'equals', value: 'BLOCKED' }),
+          savingsByVendor: only('status', CAPTURED),
+          disputes: only('dispute_outcome', { operator: 'isNotBlank' }),
+          trust: only('supplier_trust', { operator: 'isNotBlank' }),
+        },
+      },
       widgetLayout: {
-        spend: { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 8 },
-        savings: { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 8 },
-        count: { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 8 },
-        routes: { xTrack: 0, yTrack: 8, xSpan: 8, ySpan: 20 },
-        table: { xTrack: 8, yTrack: 8, xSpan: 16, ySpan: 20 },
+        spend: { xTrack: 0, yTrack: 0, xSpan: 6, ySpan: 7 },
+        savings: { xTrack: 6, yTrack: 0, xSpan: 6, ySpan: 7 },
+        count: { xTrack: 12, yTrack: 0, xSpan: 6, ySpan: 7 },
+        blocked: { xTrack: 18, yTrack: 0, xSpan: 6, ySpan: 7 },
+        routesOverTime: { xTrack: 0, yTrack: 7, xSpan: 12, ySpan: 16 },
+        savingsByVendor: { xTrack: 12, yTrack: 7, xSpan: 12, ySpan: 16 },
+        disputes: { xTrack: 0, yTrack: 23, xSpan: 12, ySpan: 14 },
+        trust: { xTrack: 12, yTrack: 23, xSpan: 12, ySpan: 14 },
+        table: { xTrack: 0, yTrack: 37, xSpan: 24, ySpan: 22 },
       },
     },
   ],

@@ -121,6 +121,7 @@ export type StudioRow = {
   payout_net?: string
   dispute_win_odds?: number
   dispute_outcome?: string
+  supplier_trust?: number
 }
 export type RunEvent = { seq: number; stage: string; event: string; [k: string]: unknown }
 export type MandateInput = {

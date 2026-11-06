@@ -17,7 +17,7 @@ from .integrations.llm import make_llm
 from .integrations.paypal import PayPalAPIError, make_gateway
 from .orchestrator import Runtime, run_demo
 from .stages import s05_verify, s08_defend
-from .stages.s09_observe import kpis, transaction_rows
+from .stages.s09_observe import kpis, transaction_rows, with_supplier_trust
 
 router = APIRouter(prefix="/api")
 _rt: Runtime | None = None
@@ -78,6 +78,7 @@ def studio_rows(run_id: str | None = None, history: bool = False):
     if history:
         rows += [{**r, "source": "seeded"} for r in transaction_rows(history_ledger())]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
+    rows = with_supplier_trust(rows)
     return {"rows": rows, "kpis": kpis(rows)}
 
 

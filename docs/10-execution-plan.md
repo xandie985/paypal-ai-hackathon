@@ -316,11 +316,11 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 
 - [x] Seeded history through the real step functions (`app/seed.py`, `?history=true`)
 - [x] Frozen Studio row contract, checked against the frontend (`tests/test_studio_contract.py`)
-- [ ] Decide: keep the single flat table, or build the multi-table model (doc 11 §8, `GET /api/studio/sources`) before the widgets
-- [ ] Widget 1: savings vs baseline by vendor and category
-- [ ] Widget 2: firewall routes over time (auto / approval / blocked), now possible with `created_at`
-- [ ] Widget 3: dispute outcomes and supplier trust (WON / LOST / SETTLED, stage 10 scores)
-- [ ] KPI tiles from `kpis()`
+- [x] Decide: keep the single flat table (decided 2026-11-06). The multi-table model (doc 11 §8) is not needed for the widgets.
+- [x] Widget 1: saved vs retail by vendor and category, on captured purchases only (`column-chart-grouped`)
+- [x] Widget 2: firewall routes by week (`column-chart-stacked` on `created_at::week`)
+- [x] Widget 3: dispute outcomes by supplier (`bar-chart-stacked`, disputed rows only) beside supplier trust (new `supplier_trust` column, same formula as `s10_learn.supplier_trust`; payout attacks unscored)
+- [x] KPI tiles: captured spend, saved vs retail (captured), purchases, blocked by the firewall
 - [ ] Lineage timeline: click a grid row to see its ledger entries with `entry_hash` / `prev_hash` and the chain badge
 - [ ] `GET /api/runs/{id}/calibration` (before, after, changes, trust) and the mandate v1 → v2 diff
 - [ ] Studio Agent natural-language prompts over the data (read-only: it can't move money)

@@ -30,6 +30,7 @@ ROW_COLUMNS = (
     "payout_net",
     "dispute_win_odds",
     "dispute_outcome",
+    "supplier_trust",
 )
 
 
@@ -95,3 +96,26 @@ def kpis(rows: list[dict]) -> dict:
         "disputes_lost": sum(r.get("dispute_outcome") == "LOST" for r in rows),
         "disputes_settled": sum(r.get("dispute_outcome") == "SETTLED" for r in rows),
     }
+
+
+def with_supplier_trust(rows: list[dict]) -> list[dict]:
+    """Add each vendor's stage 10 trust score, computed over the rows shown (run plus history when
+    merged): delivery PASS and dispute WON count for the supplier; any other verdict or outcome
+    (FAIL, LATE, LOST, SETTLED) counts against. Same formula as s10_learn.supplier_trust."""
+    from .s10_learn import trust_score
+
+    good: dict[str, int] = defaultdict(int)
+    bad: dict[str, int] = defaultdict(int)
+
+    def scored(r: dict) -> bool:  # purchases only: an injected payout attempt has no real supplier
+        return bool(r.get("vendor")) and r.get("action", "order") == "order"
+
+    for r in rows:
+        if not scored(r):
+            continue
+        v = r["vendor"]
+        if r.get("delivery"):
+            (good if r["delivery"] == "PASS" else bad)[v] += 1
+        if r.get("dispute_outcome"):
+            (good if r["dispute_outcome"] == "WON" else bad)[v] += 1
+    return [{**r, "supplier_trust": trust_score(good[r["vendor"]], bad[r["vendor"]])} if scored(r) else r for r in rows]

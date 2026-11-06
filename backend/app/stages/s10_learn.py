@@ -20,6 +20,11 @@ from .s01_delegate import register_mandate
 PRIOR_A, PRIOR_B = 2, 1
 
 
+def trust_score(good: int, bad: int) -> float:
+    """Beta(2, 1) prior: a new supplier starts trusted (0.667), and evidence moves it."""
+    return round((PRIOR_A + good) / (PRIOR_A + PRIOR_B + good + bad), 3)
+
+
 def supplier_trust(ledger: EvidenceLedger, prefix: str) -> dict[str, float]:
     good, bad = defaultdict(int), defaultdict(int)
     for e in ledger.entries(prefix, "dispute_outcome"):
@@ -28,7 +33,7 @@ def supplier_trust(ledger: EvidenceLedger, prefix: str) -> dict[str, float]:
         seal = ledger.latest(e.lineage_id, "seal")
         if seal:
             (good if e.payload["verdict"] == "PASS" else bad)[seal.payload["seller_id"]] += 1
-    return {s: round((PRIOR_A + good[s]) / (PRIOR_A + PRIOR_B + good[s] + bad[s]), 3) for s in set(good) | set(bad)}
+    return {s: trust_score(good[s], bad[s]) for s in set(good) | set(bad)}
 
 
 def calibrate(ledger: EvidenceLedger, mandate: Mandate, mandate_lid: str) -> dict:

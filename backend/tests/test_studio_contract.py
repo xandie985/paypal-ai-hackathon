@@ -23,7 +23,7 @@ COMMAND_CENTER = Path(__file__).parents[2] / "frontend" / "src" / "studio" / "Co
 FROZEN = (
     "lineage_id", "source", "created_at", "updated_at", "vendor", "category", "action", "route", "amount", "savings",
     "firewall_ms", "blocked_reasons", "approved_by", "order_id", "capture_id", "status", "delivery", "invoice_status",
-    "payout_net", "dispute_win_odds", "dispute_outcome",
+    "payout_net", "dispute_win_odds", "dispute_outcome", "supplier_trust",
 )  # fmt: skip
 
 
@@ -41,13 +41,16 @@ def test_every_row_key_is_in_the_contract():
 
 def test_frontend_studio_fields_match_the_contract():
     src = COMMAND_CENTER.read_text()
-    helpers = set(re.findall(r"^\s*(?:text|money|datetime)\('([a-z_]+)'", src, re.M))
+    helpers = set(re.findall(r"^\s*(?:text|money|datetime|percent)\('([a-z_]+)'", src, re.M))
     literals = set(re.findall(r"\{ id: '([a-z_]+)', name: '[^']*', description: '[^']*', format:", src))
     field_ids = helpers | literals
     table_cols = set(re.findall(r"'([a-z_]+)'", re.search(r"cols: \[([^\]]*)\]", src).group(1)))
     money = set(re.findall(r"'([a-z_]+)'", re.search(r"const MONEY = \[([^\]]*)\]", src).group(1)))
     assert field_ids and field_ids <= set(ROW_COLUMNS), field_ids - set(ROW_COLUMNS)
     assert table_cols <= field_ids, table_cols - field_ids  # the table can only show defined fields
+    widget_refs = set(re.findall(r"f\('([a-z_]+)'\)", src)) | set(re.findall(r"only\('([a-z_]+)'", src))
+    assert {"vendor", "route", "dispute_outcome", "supplier_trust", "savings"} <= widget_refs
+    assert widget_refs <= field_ids, widget_refs - field_ids  # every widget, filter and sort binds a defined field
     assert money <= field_ids
 
 
@@ -91,3 +94,18 @@ def test_history_is_opt_in_and_verifiable():
     assert len(both) > len(plain) and both[0]["source"] == "run"  # the current run is newest, so on top
     v = client.get("/api/studio/history/verify").json()
     assert v["chain_ok"] is True and v["entries"] > 100
+
+
+def test_supplier_trust_matches_stage_10():
+    """The column and stage 10 must agree, or the dashboard and the mandate calibration tell different stories."""
+    from app.stages.s09_observe import with_supplier_trust
+    from app.stages.s10_learn import supplier_trust
+
+    led = build_history(now=NOW)
+    rows = with_supplier_trust(transaction_rows(led))
+    by_vendor = {r["vendor"]: r["supplier_trust"] for r in rows if "supplier_trust" in r}
+    attacks = [r for r in rows if r.get("action") == "payout"]
+    assert attacks and all("supplier_trust" not in r for r in attacks)  # an injected payout has no supplier to score
+    for vendor, score in supplier_trust(led, None).items():
+        assert by_vendor[vendor] == score, vendor
+    assert all(0 < t <= 1 for t in by_vendor.values())
