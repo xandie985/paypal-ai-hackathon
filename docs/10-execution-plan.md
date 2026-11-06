@@ -70,14 +70,14 @@ Every design choice below traces to a paper in doc 02. Doc 09 §7 notes that the
 |---|---|---|
 | Core primitives: ledger, lineage, gates, money | Built, with tests | None |
 | Stages 1–10 | Built. The full arc runs in replay mode. | Stages 5, 6, 7 and 10 are scripted rather than live |
-| Tests | Doc 09 reports 29 passing (21 test functions, some parametrised) | **Not re-run on this machine.** `backend/.venv` doesn't exist yet. |
+| Tests | 147 passing (2026-11-06) | None |
 | API, [`api.py`](../backend/app/api.py) | `POST /api/demo/run`, `GET /api/ledger`, `/ledger/verify`, `/studio/rows` | **`/demo/run` is one synchronous call.** A UI can't pause for human approval, and a real PayPal order can't wait for buyer approval. This is the first task in Phase 1. |
 | Orchestrator, [`orchestrator.py`](../backend/app/orchestrator.py) | `run_demo` runs the whole arc and calls `asyncio.run(negotiate(...))` | `asyncio.run` can't be called from inside an async endpoint. Negotiation has to be awaited directly. |
-| PayPal client, [`integrations/paypal.py`](../backend/app/integrations/paypal.py) | `SandboxPayPal` covers Orders v2, Invoicing v2, Payouts v1, `provide-evidence` and webhook verify, with OAuth caching | **Never run against the sandbox.** Webhook verification takes a parsed dict, not the raw body (see pain point #11). |
-| Channel3, [`integrations/channel3.py`](../backend/app/integrations/channel3.py) | Replay catalog works | Live path, auth header and field names are **placeholders** |
+| PayPal client, [`integrations/paypal.py`](../backend/app/integrations/paypal.py) | `SandboxPayPal` covers Orders v2, Invoicing v2, Payouts v1, `provide-evidence` and webhook verify, with OAuth caching | Run live in Phases 0 and 1. Webhook verification now takes the raw body (Phase 3, pain point #11). |
+| Channel3, [`integrations/channel3.py`](../backend/app/integrations/channel3.py) | Replay and live both work (`/v1/search`, `x-api-key`), verified in Phase 0 | None |
 | LLM, [`integrations/llm.py`](../backend/app/integrations/llm.py) | Optional Claude layer with structured output and fallback | Not used by any stage yet. That's intended: it drafts text only. |
-| Frontend | Vite, React 19 and Tailwind 4. `/api` is proxied to `:8000`. | **[`App.tsx`](../frontend/src/App.tsx) is a 14-line health check. There is no UI.** |
-| Deploy | — | CORS allows only `localhost:5173`. The ledger is a local SQLite file. Nothing is set up for Render. |
+| Frontend | Mission Control, the dispute desk, the webhook inspector and the AG Studio Command Center (Phases 1 to 3) | UI polish sweep in Phase 4 |
+| Deploy | `Dockerfile` and `render.yaml`; the API serves the built frontend; CORS comes from settings; verified locally as one process (2026-11-06) | Create the Render service from the Blueprint and fill in the secrets. Docker itself has not been run on this machine. |
 
 ---
 
@@ -323,8 +323,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 - [x] KPI tiles: captured spend, saved vs retail (captured), purchases, blocked by the firewall
 - [x] Lineage timeline: click a grid row to see its ledger entries with `entry_hash` / `prev_hash` and the chain badge (`GET /api/studio/lineage/{id}`, `LineageDrawer`)
 - [x] `GET /api/runs/{id}/calibration` (read-only preview) and the mandate v1 → v2 diff (`GET /api/studio/calibrations` for the seeded history, `MandateDiff` panel)
-- [ ] Studio Agent natural-language prompts over the data (read-only: it can't move money)
-- [ ] Exit check: a Studio prompt builds a widget from run plus seeded data, a row opens its lineage, the mandate diff is visible
+- [x] Studio Agent natural-language prompts over the data (read-only: it can't move money). Claude Haiku 5.5 through `app/ai_proxy.py` and `src/studio/claudeAdapter.ts`; verified live 2026-11-06: "Add a chart of captured savings by category" ran the orchestrator, Page agent and Widget agent and added the widget
+- [x] Exit check: a Studio prompt builds a widget from run plus seeded data, a row opens its lineage, the mandate diff is visible
 
 ---
 
@@ -426,6 +426,13 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 
 **Exit:** the public URL runs the arc. The evaluation table is in the README. **Feature freeze Tuesday Nov 10 at 18:00.**
 
+**Phase 4 status (2026-11-06):**
+- [x] 4a Render files: `Dockerfile`, `render.yaml`, `FRONTEND_DIST` static serving, CORS from settings, single worker. Verified locally as one process. [ ] The service itself is not created yet (needs the Render account, B-7).
+- [ ] 4b APIMatic: not started and not claimed anywhere (needs the account, B-7). The README says so.
+- [x] 4c Evaluation harness `backend/eval/` with `RESULTS.md`, also run as tests. It found paraphrased prompt injection slipping past the regex tripwire; the patterns were widened using the dev phrases only and the held-out catch rate (1 of 5) is reported as a known gap.
+- [x] 4d README rewritten for judges. [ ] Add the live URL after deploying.
+- [ ] 4e UI polish sweep.
+
 ---
 
 ### Phase 5: Video & submit (Tue Nov 10 – Wed Nov 11)
@@ -458,7 +465,7 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 Open items from later phases, kept here so they aren't lost while Phase 2 runs. Pick them up in Phase 3 or 4.
 
 - [ ] **Live `provide-evidence` submission.** Multipart, with the PDF brief, on a real sandbox dispute. Only the replay double has received it so far.
-- [ ] **Webhook signature verification against a real sandbox event.** `SandboxPayPal.verify_webhook` exists but has never checked a real PayPal event. It still takes a parsed dict rather than the raw body (pain point #11).
+- [ ] **Webhook signature verification against a real sandbox event.** The endpoint (`POST /api/webhooks/paypal`) verifies against the raw bytes, de-duplicates through the ledger and is unit-tested, including that the received bytes are spliced into the verify request untouched. Still open: a real PayPal event. It needs the deployed URL registered as a webhook in the sandbox app, and `PAYPAL_WEBHOOK_ID` set (pain point #11).
 - [ ] **On-screen payout block and release.** Stage 7 payout without the VERIFIED and RECONCILED gate tokens is refused, then released. It's proven in tests and the demo arc, but not shown in the UI.
 - [ ] **Stages 6, 7 and 10 are still scripted.** Invoice forensics, payout release and calibration run in replay and seeded history, not on live sandbox objects.
 

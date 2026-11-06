@@ -2,7 +2,7 @@
 
 This is the engineering companion to the strategy docs (01–08). It turns the five ideas into **one closed loop** and maps every stage, hand-off guard and demo moment to code and a test that already exist in `backend/`.
 
-> **Status (2026-11-06):** All ten stages are implemented. The acquisition half (stages 1–4) and the dispute desk (stage 8) run live against the PayPal sandbox; stages 5, 6, 7 and 10 are scripted in replay, with stage 5 delivery proof also recordable live. `107` tests pass. Phase 1 is closed and stage 8 (planned for Phase 3) is done early; Phase 2 (Observe & Learn, AG Studio) is next. Live experiments are logged in §7; the open items are in the Phase close-out below.
+> **Status (2026-11-06):** All ten stages are implemented. The acquisition half (stages 1–4) and the dispute desk (stage 8) run live against the PayPal sandbox; stages 5, 6, 7 and 10 are scripted in replay, with stage 5 delivery proof also recordable live. `147` tests pass. Phases 0 and 1 are closed, stage 8 (planned for Phase 3) was done early, Phase 2 (Observe & Learn, AG Studio, including the Claude-backed Studio assistant) is built, and the webhook endpoint and the Render deploy files are in place. The evaluation harness is `backend/eval/`. Live experiments are logged in §7; the open items are in the Phase close-out below.
 
 ---
 
@@ -199,7 +199,7 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 
 | Item | State |
 |---|---|
-| `make setup` / `make test` | Done. 29 passing. |
+| `make setup` / `make test` | Done. 147 passing. |
 | Preflight script | `scripts/phase0_check.py`. Run 2026-10-31: 0 failed. B-1 PASS, B-2 PASS (payout batch created), B-4 WARN, B-5 PASS, B-8 skipped (optional). |
 | B-1 OAuth, B-2 Payouts | **Done.** Scopes include payouts, disputes, invoicing, vault, orders. Payouts v1 needs `currency` (fixed in `s07_payout.py`). |
 | B-4 Sandbox dispute | **Open.** The disputes API answers 200 but lists 0 disputes. Stage 8 uses the replay dispute `PP-D-1001` until one exists. |

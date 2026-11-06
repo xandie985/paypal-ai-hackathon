@@ -1,107 +1,88 @@
-# PayPal AI Hackathon 2026 — Research Dossier & Project Strategy
+# PactGuard AI
 
-> **Challenge:** Build What's Next with PayPal and AI  
-> **Host:** Devpost ([paypalaihackathon.devpost.com](https://paypalaihackathon.devpost.com/))  
-> **Submission Deadline:** November 12, 2026 @ 12:00 PM PST  
-> **Total Prize Pool:** \$69,750  
-> **Repository Status:** Private Workspace & Research Hub
+**An autonomous purchasing agent with a spend mandate it cannot talk its way past.** You hand it a budget and a mandate. It finds products on the real retail graph (Channel3), negotiates with sellers, and pays through PayPal. A deterministic firewall stands in front of every money movement, and every decision is sealed in a tamper-evident ledger. When a purchase is disputed, the agent defends it with evidence it sealed *before* the dispute. What happens next is read back into a tighter mandate, and the whole history is explorable in an embedded **AG Studio** command center.
 
----
+Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-## 🎯 Executive Summary
+> **Live demo:** _add the Render URL here after deploying (see "Deploy" below)._ It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox.
 
-This repository contains the end-to-end strategic research, technical benchmarking, user pain point validation, competitive intelligence, and implementation architecture for competing in the **PayPal AI Hackathon 2026**.
+## The loop
 
-Our primary project proposal is **PactGuard AI** — an autonomous agentic procurement, multi-agent negotiation, and spend-mandate control plane for PayPal. It combines **Channel3** product discovery, **Constitutional Multi-Agent Negotiation** (governed by academic benchmarks), **4-Factor Auto-Purchase Mandate Firewalls** (`arXiv:2610.29216`), and atomic **PayPal Orders, Invoicing, and Payouts** settlement inside an **AG Studio** self-serve analytics command center.
+**Delegate → Discover → Negotiate → Govern → Settle & seal → Verify → Reconcile → Pay out → Defend → Learn**
 
----
+1. **Delegate.** A mandate (budget, auto-approve threshold, per-transaction cap, vendor allowlist, return policy) is hashed into the root of a lineage ID. Every later call and ledger row carries it.
+2. **Discover and negotiate.** Channel3 gives a retail baseline. The buyer negotiates with several sellers over three bounded turns. Every seller message must pass a schema gate or that seller is dropped, and exactly one seller can be committed.
+3. **Govern.** A four-factor firewall (warrant, reversibility, price against baseline, budget) routes each purchase to `AUTO_SETTLE`, `HUMAN_APPROVAL` or `BLOCKED` in well under a millisecond, with no LLM in the path.
+4. **Settle and seal.** PayPal Orders v2 with a lineage-derived `PayPal-Request-Id`, so a retry can never charge twice. The terms the buyer agreed to are sealed in the ledger, and capture refuses to run without that seal.
+5. **Verify, reconcile, pay out.** A payout needs both a `VERIFIED` (delivery) and a `RECONCILED` (invoice forensics) gate token. Webhooks are verified against the raw bytes, de-duplicated and stored.
+6. **Defend.** On a dispute, the desk assembles a PDF brief from the sealed record, estimates the win odds, and drafts the response. A person decides. Nothing reaches PayPal without a click.
+7. **Learn.** Dispute outcomes and delivery proof feed a per-supplier trust score and propose mandate v2, shown as a before/after diff.
 
-## 📁 Repository Structure
-
-The documentation is organized following industry standards for modularity and ease of consumption:
-
-```text
-paypal-ai-hackathon/
-├── README.md                                  # Repository overview and quick start
-└── docs/
-    ├── 01-problem-decomposition.md            # 8 decomposed sub-problems, difficulty & feasibility
-    ├── 02-literature-and-technical-landscape.md # 10 verified arXiv papers (2025-2026) & protocols
-    ├── 03-user-pain-points-and-signals.md     # 12 verified user pain points (GitHub, HN, Reddit, SO)
-    ├── 04-competitor-and-prior-art.md         # 14 direct/adjacent competitors & sponsor matrix
-    ├── 05-feature-ideation.md                 # 25 concrete product concepts with full metadata
-    ├── 06-idea-ranking.md                     # 8-criteria scoring matrix & ranking table
-    ├── 07-top-3-recommendations.md            # Detailed briefs for PactGuard, AegisPay, ChronoPay
-    ├── 08-final-recommendation-and-roadmap.md # Strategic choice, 36h sprint plan & demo script
-    ├── 09-implementation-framework.md         # Unified full loop: stage→code map, guard matrix, readiness
-    ├── 10-execution-plan.md                   # Phased delivery: pain points → solutions, per-phase technicalities
-    ├── 11-dashboard-ui-plan.md                # Design system, screens, AG Studio reference, UI tasks per phase
-    └── full-research-dossier.md               # Complete consolidated single-file dossier
-```
-
----
-
-## 🏆 Prize Optimization & Sponsor Alignment Strategy
-
-According to **Section 8 of the Official Rules** (verified via the [Devpost FAQ](https://paypalaihackathon.devpost.com/details/faqs)):
-> *"You can use more than one sponsor tool, and you'll be considered for the sponsor prize of each tool you use, but a single project can win at most one Sponsor Prize plus either one Grand Prize or one Honorable Mention Prize."*
-
-By building **PactGuard AI**, we target the maximum allowable winning footprint across both overall and sponsor tracks:
-
-| Award Track | Prize Value | Lead Judge on Panel | Integrated Capability |
-| :--- | :--- | :--- | :--- |
-| **1st Place Grand Prize** | **\$12,000 cash** | PayPal Developer Advocates & PMs | Complete, working end-to-end multi-agent financial system |
-| **Best Use of Agentic Commerce** | **\$5,000 cash** | PayPal Engineering Leadership | Multi-agent autonomous discovery, negotiation, and settlement |
-| **Best Use of PayPal + AI** | **\$5,000 cash** | PayPal Engineering Leadership | Deep use of `@paypal/agent-toolkit`, Orders v2, Invoices v2, Payouts |
-| **Best Use of AG Grid (1st Place)** | **\$5,000 cash** | Sylwia Vargas (Sr. Tech Community Mgr, AG Grid) | Embedded AG Studio + Studio Agent Framework with custom widgets |
-| **Best Use of Channel3** | **\$1,500 cash** | Ignacio Valdez Bicard (Founding Eng, Channel3) | Channel3 API / MCP for 100M+ real product graphs & pricing |
-| **Best Use of APIMatic** | **\$1,000 cash** + 6mo Business | Ameer Hassan (Co-Founder, APIMatic) | APIMatic Context Plugin ensuring 0 API hallucinations & clean SDK |
-| **Best Use of Render** | **\$1,000 credits** | Shifra Williams (Founding DevRel, Render) | Full-stack deployment + Render Workflows agent orchestration |
-
----
-
-## 🛠️ Recommended Tech Stack
-
-* **Backend:** Python 3.11+, FastAPI, Uvicorn, SQLite/PostgreSQL
-* **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
-* **Fintech & Payment Rails:** `@paypal/agent-toolkit` (TypeScript/Python), PayPal Orders v2 REST API, PayPal Invoicing v2 REST API, PayPal Payouts API, PayPal Webhooks
-* **AI & Agent Orchestration:** Anthropic Claude (`claude-opus-5-5`, optional — money decisions stay deterministic), Model Context Protocol (MCP), LangChain / custom async event loops
-* **Sponsor Frameworks:** AG Studio (`@ag-grid-enterprise/all-modules` + Studio Agent Framework), Channel3 API/MCP, APIMatic Context Plugins
-* **Deployment & Cloud:** Render (Web Service + Render Workflows)
-
----
-
-## 🧩 Implementation (backend/)
-
-The unified loop (**Delegate → Buy → Pay → Deliver → Pay out → Defend → Learn**) is implemented as ten stage modules sharing a hash-chained evidence ledger, a lineage ID, gate tokens and penny-exact money. See [`docs/09-implementation-framework.md`](docs/09-implementation-framework.md).
+## Run it
 
 ```bash
-make setup
+make setup      # venv, npm install, copies .env.example to .env
+make test       # 147 tests
+make backend    # API on :8000 (REPLAY_MODE=true runs everything offline)
+make frontend   # UI on :5173, in a second terminal
 ```
 
-```bash
-make test
+`make serve` builds the frontend and serves both from one process on :8000, which is the shape that runs on Render.
+
+To use the live sandbox, set `REPLAY_MODE=false` and fill in the PayPal and Channel3 keys in `.env`. To enable the Studio assistant, set `ANTHROPIC_API_KEY`; `LLM_MODEL` picks the model (we run `claude-haiku-5-5`). The AG Studio licence key goes in `frontend/.env.local` as `VITE_AG_STUDIO_LICENSE`. It ships in the browser bundle by design, so it is the only key that ever does.
+
+### Deploy
+
+[`render.yaml`](render.yaml) and the [`Dockerfile`](Dockerfile) define one web service that serves the API and the built frontend from a single process. It runs a single worker, because run sessions live in process memory. Create it from the Blueprint, fill in the secrets Render asks for, and keep `REPLAY_MODE=true` for the public URL. The filesystem is ephemeral, so the ledger resets on restart and the seeded history is rebuilt on demand. To receive real PayPal webhooks, register `https://<your-service>/api/webhooks/paypal` as a webhook in the sandbox app and set `PAYPAL_WEBHOOK_ID`.
+
+## What is live and what is simulated
+
+| Stage | State |
+|---|---|
+| 1 Delegate, 3 Govern, 4 Settle | Real code. **Live against the PayPal sandbox**: Orders v2, including saved-wallet (vault) capture with no popup, and the PayPal JS SDK approval button for orders that need a person. |
+| 2 Discover | Real code. **Live against Channel3** (`/v1/search`), with a labelled retailer return-policy table because Channel3 does not return return terms. |
+| 2 Negotiate | Real protocol, **simulated sellers**: deterministic concession policies, not merchants or LLMs. |
+| 5 Verify, 6 Reconcile, 7 Payout, 10 Learn | Real code, **scripted inputs** in replay. Delivery proof can be recorded live. The Payouts v1 call has been run against the sandbox. |
+| 7 Webhooks | Real endpoint and raw-body verification, unit-tested. Not yet checked against a real PayPal sandbox event. |
+| 8 Defend | Reads **real sandbox disputes** and answers through PayPal's dispute actions. The multipart `provide-evidence` upload is verified against the replay gateway, not yet against a live case. |
+| 9 Observe | Real. AG Studio over the ledger, with a seeded history of past purchases built through the same step functions. |
+
+## Evaluation
+
+`python -m eval.run_all` (from `backend/`) runs three offline, seeded evaluations and writes [`backend/eval/RESULTS.md`](backend/eval/RESULTS.md). The same checks run in `make test`.
+
+| Evaluation | Result |
+|---|---|
+| **Firewall**, 55 scenarios with intended routes written down in advance | 51 routed as intended. Zero unsafe auto-settles for over-budget, over-cap, non-refundable, off-allowlist, review-first, agent-initiated payout, or directly phrased injection scenarios. Decision latency p50 0.03 ms. |
+| **Negotiation**, 20 seeded runs, 19 misbehaving sellers injected | All 19 dropped by the schema gate, none won, no run committed to two sellers, never more than 3 turns. Savings averaged 18.5% against **simulated** sellers (range 3.7% to 27.7%), so treat that figure as a property of the simulation. |
+| **Idempotency**, 10 retries of each money operation | Exactly 1 real side effect for order, capture, invoice, send, reminder and payout. |
+
+**Known weak spot, stated plainly:** prompt-injection detection is a regex tripwire. It catches every direct phrasing we tried and the paraphrases it was tuned against, but only **1 of 5** paraphrases written beforehand and never used to tune it. It is a tripwire, not the safeguard: seller text never changes a route except to block it, so a phrasing that slips through can only auto-settle a purchase that independently passes all four factors. A model-based classifier that may only escalate is the next step.
+
+## How each tool is used
+
+| Tool | What we did with it |
+|---|---|
+| **PayPal** | REST APIs called directly: Orders v2 (create, capture, vault), Invoicing v2 (draft-first, then send), Payouts v1, Disputes (read, offer, message, evidence), and Webhooks (raw-body verification). We do not use `@paypal/agent-toolkit`: it has no spend cap, no idempotency discipline and no payout tool, which are the gaps the firewall, lineage-derived request IDs and gate tokens close. |
+| **AG Grid / AG Studio** | The Command Center is an AG Studio report over the evidence ledger: spend, savings by vendor, firewall routes by week, dispute outcomes beside supplier trust, and a transactions grid. Clicking a row opens its sealed lineage. A mandate v1 → v2 diff sits beside it. The Studio assistant runs on **Claude Haiku 5.5** through an adapter we wrote for Studio's `AgLlmAdapter` contract, with the key held server-side. |
+| **Channel3** | Live product search for the retail baseline and candidate sellers. |
+| **Render** | One Docker web service from `render.yaml`. Not yet deployed by us: that needs the account step. |
+| **APIMatic** | **Not used yet.** We will record which payloads it checks here once it is, and not before. |
+| **Anthropic Claude** | Optional, and never in the money path: rewording dispute drafts, and the Studio assistant. With no key, or in replay mode, templates are used. |
+
+## Architecture
+
+```
+frontend/   React 19, Vite, Tailwind 4, AG Studio          Mission Control · Command Center
+backend/
+  app/stages/   s01..s10    one module per stage, pure functions over the ledger
+  app/core/     ledger (hash-chained, append-only SQLite), lineage IDs, HMAC gate tokens, penny-exact money
+  app/integrations/   PayPal (replay + sandbox), Channel3, Claude
+  app/runs.py   run sessions: the loop behind step functions a UI can pause
+  app/api.py    REST + SSE, webhooks, Studio rows and lineage   ·   app/ai_proxy.py  Studio assistant proxy
+  eval/         the three evaluations
 ```
 
-```bash
-make backend
-```
+## Research and planning
 
-`REPLAY_MODE=true` (the default) runs the whole demo arc offline; `POST /api/demo/run` returns the timeline.
-
-### 🔬 Live Empirical Validation & Experiments
-The codebase has been empirically verified against live sandbox APIs (documented in detail in [`docs/09-implementation-framework.md` §7](docs/09-implementation-framework.md#7-live-sandbox--integration-experiments-log-phases-0--1)):
-* **Autonomous Vaulted-Wallet Execution (B-9):** Confirmed zero-popup server-side capture via PayPal Vault payment tokens (`vault_id: 8ng18757…`, Order `7LX28344P4713330H`, Capture `3L94707948760335B` `COMPLETED`).
-* **Real-World Discovery & Pricing Baseline (Channel3):** Live catalog queries via `/v1/search` with header `x-api-key`, mapped through a verified retailer return-policy table (`RETURN_POLICY_DAYS`).
-* **Spend Mandate Governance & Human Approval:** Deterministic 4-Factor Firewall (`Warrant`, `Reversibility`, `Price vs Baseline`, `Budget & Velocity`). Low-risk items under auto-threshold auto-settle; high-value negotiated items ($1,020 monitor batch) or items with hidden return terms require explicit user approval via the golden PayPal JS SDK button.
-* **Cryptographic Ledger & Dispute Playbooks (Stage 8):** Tamper-evident SHA-256 hash chaining, dynamic ReportLab PDF evidence brief generation, and automated EV calculation across 8 dispute reason playbooks (`Item Not Received`, `Not As Described`, `Duplicate Charge`, `Wrong Amount`, `Refund Not Received`, `Unauthorised`, `Recurring Cancelled`, `Other`). Verified live against real PayPal sandbox cases `PP-R-EGO-10196439` and `PP-R-PVO-10196452`, with live carrier tracking recording (`POST /api/deliveries`) that flips win odds to 95% with `PROOF_OF_FULFILLMENT`.
-* **Automated Test Coverage:** 95/95 passing pytest unit & scenario tests (0.3s runtime) with 100% clean Ruff & Oxlint code quality.
-
----
-
-## 🚀 Quick Navigation
-
-* To review the technical and academic literature foundations, see [`docs/02-literature-and-technical-landscape.md`](docs/02-literature-and-technical-landscape.md).
-* To understand real merchant and developer friction points in PayPal repos, see [`docs/03-user-pain-points-and-signals.md`](docs/03-user-pain-points-and-signals.md).
-* For the full architecture, demo script, and evaluation plan of **PactGuard AI**, see [`docs/07-top-3-recommendations.md`](docs/07-top-3-recommendations.md) and [`docs/08-final-recommendation-and-roadmap.md`](docs/08-final-recommendation-and-roadmap.md).
-* For the phased build plan (what is broken today, how we solve it, and the technical work in each phase), see [`docs/10-execution-plan.md`](docs/10-execution-plan.md).
-* For UI and dashboard work (design tokens, Mission Control, the AG Studio Command Center, custom widgets, Studio agents, and the UI task tracker), see [`docs/11-dashboard-ui-plan.md`](docs/11-dashboard-ui-plan.md).
+The research behind the project is in [`docs/`](docs/): problem decomposition, the literature, 12 verified user pain points, competitors, the idea ranking, and the implementation and execution plans ([`09`](docs/09-implementation-framework.md) maps every stage and guard to code and a test; [`10`](docs/10-execution-plan.md) is the phased plan and tracker; [`11`](docs/11-dashboard-ui-plan.md) is the UI plan).
