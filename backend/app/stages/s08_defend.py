@@ -241,6 +241,7 @@ class DisputeCase:
     actions: list[str] = field(default_factory=list)
     allowed_offer_types: list[str] = field(default_factory=list)
     messages: list[dict] = field(default_factory=list)
+    evidences: list[dict] = field(default_factory=list)
     outcome: str | None = None
 
     def as_dispute(self, lineage_id: str | None = None) -> Dispute:
@@ -282,6 +283,16 @@ def parse_paypal_dispute(raw: dict) -> DisputeCase:
         messages=[
             {"posted_by": m.get("posted_by", ""), "time_posted": m.get("time_posted"), "content": m.get("content", "")}
             for m in raw.get("messages", [])
+        ],
+        evidences=[
+            {
+                "evidence_type": ev.get("evidence_type", ""),
+                "notes": ev.get("notes", ""),
+                "source": ev.get("source", ""),
+                "date": ev.get("date"),
+                "tracking_info": (ev.get("evidence_info") or {}).get("tracking_info", []),
+            }
+            for ev in raw.get("evidences", [])
         ],
         outcome=(raw.get("dispute_outcome") or {}).get("outcome_code"),
     )
@@ -392,6 +403,20 @@ def assess(
     p = bundle["win_odds"] if bundle else 0.05
 
     # ---- reason playbooks: adjust odds, add reason-specific options and exclusions ----
+    return_tracking = None
+    for ev in case.evidences:
+        if ev.get("evidence_type") == "PROOF_OF_RETURN":
+            track = (ev.get("tracking_info") or [{}])[0]
+            if track.get("tracking_number"):
+                return_tracking = {
+                    "carrier": track.get("carrier_name", "Carrier"),
+                    "number": track.get("tracking_number"),
+                    "notes": ev.get("notes", ""),
+                    "date": ev.get("date"),
+                }
+    if return_tracking:
+        facts["return_tracking"] = return_tracking
+
     excl: dict[str, str] = {}
     extra: list[dict] = []
     reason = case.reason
@@ -477,6 +502,15 @@ def assess(
                 "basis": f"refund {A}, item back worth ~{rec:.0%} ({facts['claim']}), minus {RETURN_SHIPPING} return label",
             }
         )
+    if "acknowledge_return_item" in case.actions:
+        options.append(
+            {
+                "option": "acknowledge_return",
+                "via": "acknowledge_return_item",
+                "ev": q(rec * A),
+                "basis": f"confirm returned item received, refund {A} and close dispute",
+            }
+        )
     options.append(
         {
             "option": "accept",
@@ -557,6 +591,12 @@ def draft_reply(case: DisputeCase, assessment: dict, option: str) -> str:
         return (
             f"Hello, you're right, and we're sorry. {sealed}: the agreed price was {f.get('sealed_amount')} {case.currency}, "
             f"and we charged {f.get('captured_amount')}. We're refunding the {opt.get('amount')} difference."
+        )
+    if option == "acknowledge_return":
+        t_str = f" via {f['return_tracking']['carrier']} ({f['return_tracking']['number']})" if f.get("return_tracking") else ""
+        return (
+            f"Hello, we confirm receipt of the returned item{t_str} for order {f.get('order_id', '')}. "
+            f"A full refund of {case.amount} {case.currency} has been processed to resolve this case."
         )
     if option == "contest":
         why = {
@@ -641,6 +681,12 @@ def respond(
         resp = gateway.dispute_action(case.dispute_id, "send_message", {"message": note[:2000]})
     elif chosen["via"] == "make_offer":
         resp = gateway.dispute_action(case.dispute_id, "make_offer", offer_body(case, amount, note, return_address if can_return else None))
+    elif chosen["via"] == "acknowledge_return_item":
+        resp = gateway.dispute_action(
+            case.dispute_id,
+            "acknowledge_return_item",
+            {"acknowledgement_type": "ITEM_RECEIVED", "note": note[:2000]},
+        )
     else:
         resp = gateway.dispute_action(case.dispute_id, "accept_claim", {"note": note[:2000]})
 
@@ -691,6 +737,13 @@ def timeline(case: DisputeCase, assessment: dict) -> list[dict]:
     for m in case.messages:
         if m.get("time_posted"):
             out.append({"at": m["time_posted"], "who": m["posted_by"].lower() or "paypal", "what": f"Message: {m['content'][:140]}"})
+    for ev in case.evidences:
+        if ev.get("evidence_type") == "PROOF_OF_RETURN":
+            track = (ev.get("tracking_info") or [{}])[0]
+            carrier = track.get("carrier_name", "")
+            num = track.get("tracking_number", "")
+            t_str = f": {carrier} {num}" if carrier else ""
+            out.append({"at": ev.get("date") or case.updated, "who": "buyer", "what": f"Buyer shared return tracking{t_str}"})
     for r in f.get("responses", []):
         out.append(
             {"at": r["at"], "who": "us", "what": f"Sent {r['option'].replace('_', ' ')} via {r['via'].replace('_', ' ')} ({r['approver']})"}

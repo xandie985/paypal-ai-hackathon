@@ -7,6 +7,7 @@ const LABEL: Record<string, string> = {
   inform: 'Share tracking and wait',
   partial_refund: 'Refund the overcharge',
   refund_with_return: 'Refund on return',
+  acknowledge_return: 'Confirm return received & refund',
   accept: 'Accept and refund',
 }
 
@@ -38,16 +39,26 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
   const [busy, setBusy] = useState(false)
   const [scenario, setScenario] = useState(SCENARIOS[0].reason)
   const [track, setTrack] = useState<Pick<DeliveryInput, 'carrier' | 'tracking_number' | 'tracking_status'>>({ carrier: 'UPS', tracking_number: '', tracking_status: 'DELIVERED' })
+  const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
+    setLoading(true)
     try {
       setList(await api.disputes())
     } catch (e) {
       setMsg(`Could not load disputes: ${err(e)}`)
+    } finally {
+      setLoading(false)
     }
   }, [])
   useEffect(() => {
     load()
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        load()
+      }
+    }, 10000)
+    return () => clearInterval(timer)
   }, [load])
 
   const open = async (id: string) => {
@@ -117,7 +128,13 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
               </select>
             </>
           )}
-          <button className="rounded border border-slate-300 px-2 py-1" onClick={load}>Refresh</button>
+          <button
+            className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+            disabled={loading}
+            onClick={load}
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
       </header>
 
@@ -171,6 +188,11 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
                     <li>Delivery: {f.delivery_status ? `${String(f.delivery_status).toLowerCase().replace('_', ' ')} (${(f.tracking as { carrier: string; number: string }).carrier} ${(f.tracking as { carrier: string; number: string }).number})` : 'no tracking recorded'}</li>
                     <li>Human approved before payment: {f.human_approved ? 'yes' : 'no'} · ledger chain {f.chain_ok ? 'intact' : 'BROKEN'}</li>
                     <li>Missing evidence: {(f.missing_evidence as string[]).join(', ') || 'none'}</li>
+                    {Boolean(f.return_tracking) && (
+                      <li className="font-semibold text-emerald-800">
+                        Buyer return tracking: {(f.return_tracking as { carrier: string; number: string }).carrier} {(f.return_tracking as { carrier: string; number: string }).number}
+                      </li>
+                    )}
                   </>
                 )}
                 <li>Buyer's claim reads as: <b>{f.claim.replace('_', ' ')}</b> · win odds {pct(a.win_odds * 100, 0)}</li>

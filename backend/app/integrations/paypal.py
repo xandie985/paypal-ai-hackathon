@@ -204,7 +204,7 @@ class ReplayPayPal:
                 )
             d["status"], d["offer"] = "WAITING_FOR_BUYER_RESPONSE", body
             d["links"] = [link for link in d["links"] if link["rel"] == "send_message"]
-        elif action == "accept_claim":
+        elif action in ("accept_claim", "acknowledge_return_item"):
             d["status"], d["links"] = "RESOLVED", []
             d["dispute_outcome"] = {"outcome_code": "RESOLVED_BUYER_FAVOUR"}
         return {"links": [{"rel": "self", "href": f"/v1/customer/disputes/{dispute_id}"}]}
