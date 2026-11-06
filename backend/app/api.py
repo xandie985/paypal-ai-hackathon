@@ -1,16 +1,18 @@
 import asyncio
 import json
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import runs
 from .config import settings
-from .core.errors import GuardViolation
+from .core.errors import GuardViolation, WebhookUnverified
 from .core.ledger import EvidenceLedger, open_ledger
 from .domain.models import DeliveryReport, Mandate
 from .integrations.llm import make_llm
@@ -519,3 +521,61 @@ def simulate_return(dispute_id: str, body: SimulateReturn):
         raise HTTPException(409, e.to_dict()) from e
     case, _, _, a = _case(dispute_id)
     return _dec({"case": _case_json(case), "assessment": a})
+
+
+# --- PayPal webhooks (stage 7) ------------------------------------------------------------------------
+
+
+@router.post("/webhooks/paypal")
+async def paypal_webhook(request: Request):
+    """PayPal's delivery target. Verified against the raw bytes it sent, de-duplicated by event id (a retry
+    gets 200 with duplicate=true, so PayPal stops retrying), then stored in the ledger."""
+    raw = await request.body()
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "Body is not valid JSON.") from None
+    if not isinstance(event, dict) or not event.get("id"):
+        raise HTTPException(400, "Not a PayPal webhook event: no id.")
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    try:
+        # Verification is a blocking HTTP call to PayPal; keep it off the event loop.
+        return await run_in_threadpool(runtime().inbox.receive, headers, event, raw)
+    except WebhookUnverified as e:
+        raise HTTPException(401, e.to_dict()) from e
+
+
+@router.get("/webhooks")
+def webhook_events():
+    return {"events": runtime().inbox.listing(), "verification": "live" if settings.paypal_live else "replay"}
+
+
+@router.post("/webhooks/{event_id}/replay")
+def webhook_replay(event_id: str):
+    try:
+        return runtime().inbox.replay(event_id)
+    except KeyError:
+        raise HTTPException(404, f"No stored webhook event {event_id}.") from None
+
+
+class SimulatedWebhook(BaseModel):
+    event_type: str = "PAYMENT.CAPTURE.COMPLETED"
+    lineage_id: str | None = None
+    event_id: str | None = None  # send the same id twice to watch the duplicate being ignored
+
+
+@router.post("/webhooks/simulate")
+def webhook_simulate(body: SimulatedWebhook):
+    """Feeds a synthetic event through the same inbox as a real delivery. Replay mode only: live mode checks
+    PayPal's signature, which a synthetic event cannot carry."""
+    if not settings.replay_mode:
+        raise HTTPException(409, "Simulation is replay-only: live mode verifies real PayPal signatures.")
+    event = {
+        "id": body.event_id or f"WH-SIM-{uuid.uuid4().hex[:12].upper()}",
+        "event_type": body.event_type,
+        "summary": f"Simulated {body.event_type}",
+        "create_time": datetime.now(UTC).isoformat(timespec="seconds"),
+        "resource": {"id": f"SIM-{uuid.uuid4().hex[:10].upper()}", "custom_id": body.lineage_id},
+    }
+    out = runtime().inbox.receive({"paypal-transmission-sig": "simulated"}, event, json.dumps(event).encode())
+    return {**out, "event": event}

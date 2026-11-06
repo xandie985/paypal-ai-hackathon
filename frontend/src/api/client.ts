@@ -208,6 +208,15 @@ export class ApiError extends Error {
   }
 }
 
+export interface WebhookEvent {
+  event_id: string
+  event_type: string
+  summary: string | null
+  lineage_id: string
+  received_at: string
+  seq: number
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const r = await fetch(`/api${path}`, {
     method,
@@ -242,6 +251,10 @@ export const api = {
   studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
   studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
   runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),
+  webhooks: () => call<{ events: WebhookEvent[]; verification: 'live' | 'replay' }>('GET', '/webhooks'),
+  simulateWebhook: (body: { event_type?: string; lineage_id?: string; event_id?: string }) =>
+    call<{ event_id: string; duplicate: boolean; lineage_id?: string }>('POST', '/webhooks/simulate', body),
+  replayWebhook: (eventId: string) => call<Record<string, unknown>>('POST', `/webhooks/${encodeURIComponent(eventId)}/replay`),
   aiConfig: () => call<{ configured: boolean; model: string }>('GET', '/ai/config'),
   demoRun: () => call<unknown>('POST', '/demo/run'),
   disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
