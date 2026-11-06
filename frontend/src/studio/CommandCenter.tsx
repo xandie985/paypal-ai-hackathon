@@ -210,7 +210,21 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
     api.studioRows(runId, true).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
   }, [runId])
   useEffect(() => {
-    api.studioPaypal().then(setPaypal).catch((e) => { setPaypal(null); setPaypalError(String(e)) })
+    api
+      .studioPaypal()
+      .then(setPaypal)
+      .catch((e) => {
+        api
+          .studioPaypal(true)
+          .then((p) => {
+            setPaypal(p)
+            setPaypalError(`Live sandbox reporting unavailable (${String(e)}). Showing fixture data.`)
+          })
+          .catch((e2) => {
+            setPaypal(null)
+            setPaypalError(String(e2))
+          })
+      })
   }, [])
   useEffect(load, [load])
   useEffect(() => {

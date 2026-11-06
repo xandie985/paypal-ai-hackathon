@@ -619,9 +619,11 @@ def paypal_tables(gw=None, now: datetime | None = None) -> dict:
 
 
 @router.get("/studio/paypal")
-def studio_paypal():
+def studio_paypal(fixture: bool = False):
     """Tables behind the Command Center's PayPal overview pages. A plain `def`, so FastAPI runs the blocking
     httpx calls in its thread pool, off the event loop."""
+    if fixture:
+        return {"source": "replay", **build_tables(fixture_account(), FIXTURE_AS_OF)}
     gw = _gateway()
     if not isinstance(gw, SandboxPayPal):
         return paypal_tables(gw)
