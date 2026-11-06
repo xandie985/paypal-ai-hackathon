@@ -41,6 +41,7 @@ const fields: AgFieldDefinition[] = [
   datetime('created_at', 'Time', 'When the agent first proposed this purchase (sealed ledger time, shown in your time zone)'),
   datetime('updated_at', 'Last update', 'Time of the latest ledger entry for this purchase (approval, capture, dispute…)'),
   text('lineage_id', 'Lineage ID', 'PG-… ID shared by every ledger entry for one purchase'),
+  text('source', 'Source', 'run = the current mandate; seeded = synthetic history run through the same code path'),
   text('order_id', 'Order ID', 'PayPal order ID'),
   text('capture_id', 'Capture ID', 'PayPal capture ID'),
   text('vendor', 'Vendor', 'Seller the agent bought from or proposed to buy from'),
@@ -50,12 +51,12 @@ const fields: AgFieldDefinition[] = [
   money('amount', 'Amount', 'Proposed purchase total in USD (unit price × quantity)'),
   money('savings', 'Savings', 'Saving against the retail baseline in USD'),
   { id: 'firewall_ms', name: 'Firewall ms', description: 'Firewall decision latency in milliseconds', format: 'integerFormat' },
-  text('status', 'Status', 'CAPTURED once PayPal captured the payment'),
+  text('status', 'Status', 'CAPTURED once PayPal captured the payment, REJECTED if a human declined it'),
   text('approved_by', 'Approved by', 'Human approver for HUMAN_APPROVAL purchases'),
   text('delivery', 'Delivery', 'Delivery proof verdict'),
   text('invoice_status', 'Invoice', 'Reconciliation status of the PayPal invoice'),
   money('payout_net', 'Payout net', 'Net amount paid out to the supplier'),
-  text('dispute_outcome', 'Dispute', 'WON or LOST when a dispute was raised'),
+  text('dispute_outcome', 'Dispute', 'WON, LOST (contested and lost) or SETTLED (we offered the refund)'),
   text('blocked_reasons', 'Blocked reasons', 'Why the firewall blocked the purchase'),
 ]
 
@@ -96,7 +97,7 @@ const report: AgReportState = {
         table: {
           type: 'grid',
           format: title('Transactions'),
-          dataMapping: { cols: ['created_at', 'lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
+          dataMapping: { cols: ['created_at', 'source', 'lineage_id', 'order_id', 'vendor', 'category', 'route', 'amount', 'savings', 'status', 'blocked_reasons'].map((id) => ({ id: f(id) })) },
           sort: [{ field: { id: f('created_at') }, direction: 'desc' }], // newest purchase on top
         },
       },
@@ -116,7 +117,7 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AgStudioMode>('view')
   const load = useCallback(() => {
-    api.studioRows(runId).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
+    api.studioRows(runId, true).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
   }, [runId])
   useEffect(load, [load])
   const data = useMemo(() => (rows ? toSources(rows) : null), [rows])

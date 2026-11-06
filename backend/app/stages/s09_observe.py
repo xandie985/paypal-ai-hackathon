@@ -6,6 +6,32 @@ from decimal import Decimal
 
 from ..core.ledger import EvidenceLedger
 
+# The row contract Studio widgets bind to. Renaming or dropping a key breaks saved dashboards, so
+# tests/test_studio_contract.py freezes this list and checks the frontend's field ids against it.
+ROW_COLUMNS = (
+    "lineage_id",
+    "source",
+    "created_at",
+    "updated_at",
+    "vendor",
+    "category",
+    "action",
+    "route",
+    "amount",
+    "savings",
+    "firewall_ms",
+    "blocked_reasons",
+    "approved_by",
+    "order_id",
+    "capture_id",
+    "status",
+    "delivery",
+    "invoice_status",
+    "payout_net",
+    "dispute_win_odds",
+    "dispute_outcome",
+)
+
 
 def transaction_rows(ledger: EvidenceLedger, lineage_prefix: str | None = None) -> list[dict]:
     """`lineage_prefix` = a run's mandate lineage: live runs share one ledger file."""
@@ -35,6 +61,8 @@ def transaction_rows(ledger: EvidenceLedger, lineage_prefix: str | None = None) 
                 r["savings"] = str((Decimal(base) - Decimal(prop["unit_price"])) * prop["quantity"])
         elif e.kind == "approval":
             r["approved_by"] = p["approver"]
+        elif e.kind == "rejection":
+            r["status"] = "REJECTED"
         elif e.kind == "seal":
             r["order_id"] = p.get("order_id", "")
         elif e.kind == "capture":

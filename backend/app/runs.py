@@ -123,7 +123,7 @@ def step_delegate(run: Run) -> None:
     run.emit("1", "mandate_registered", lineage_id=run.mandate_lineage, digest=run.mandate.digest()[:16])
 
 
-async def step_discover_and_negotiate(run: Run, need: Need, method: str) -> Item:
+async def step_discover_and_negotiate(run: Run, need: Need, method: str, sellers: list | None = None) -> Item:
     rt, mlid = run.rt, run.mandate_lineage
     found = s02_discover.discover(rt.products, run.mandate, need)
     baseline = found["baseline_unit_price"]
@@ -139,7 +139,7 @@ async def step_discover_and_negotiate(run: Run, need: Need, method: str) -> Item
     )
     if method == "negotiate":
         lid = txn_lineage(mlid, need.category, "bulk")
-        neg = await s02_negotiate.negotiate(lid, run.mandate, need, demo_sellers(), baseline)
+        neg = await s02_negotiate.negotiate(lid, run.mandate, need, sellers or demo_sellers(), baseline)
         w = neg.winner
         if w is None:
             raise ValueError(f"no seller passed the schema gate and mandate for {need.category}")

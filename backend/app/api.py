@@ -52,16 +52,39 @@ def ledger_verify():
     return {"chain_ok": ok, "first_bad_seq": bad}
 
 
+_history = None
+
+
+def history_ledger():
+    """Seeded history, built once per process through the real step functions (app/seed.py)."""
+    global _history
+    if _history is None:
+        from .seed import build_history
+
+        _history = build_history()
+    return _history
+
+
 @router.get("/studio/rows")
-def studio_rows(run_id: str | None = None):
-    """Row data for AG Grid / AG Studio widgets."""
+def studio_rows(run_id: str | None = None, history: bool = False):
+    """Row data for AG Grid / AG Studio widgets. `history=true` adds the seeded history, tagged
+    `source: "seeded"`, so a run can be read against ~30 past mandates."""
     # An unknown run (e.g. wiped by a backend restart) is a 404, never another run's data.
     if run_id or runs.RUNS:
         run = _run(run_id) if run_id else list(runs.RUNS.values())[-1]
-        rows = transaction_rows(run.rt.ledger, run.mandate_lineage)
+        rows = [{**r, "source": "run"} for r in transaction_rows(run.rt.ledger, run.mandate_lineage)]
     else:
-        rows = transaction_rows(runtime().ledger)
+        rows = [{**r, "source": "demo"} for r in transaction_rows(runtime().ledger)]
+    if history:
+        rows += [{**r, "source": "seeded"} for r in transaction_rows(history_ledger())]
+        rows.sort(key=lambda r: r["created_at"], reverse=True)
     return {"rows": rows, "kpis": kpis(rows)}
+
+
+@router.get("/studio/history/verify")
+def history_verify():
+    ok, bad = history_ledger().verify()
+    return {"chain_ok": ok, "first_bad_seq": bad, "entries": len(history_ledger().entries())}
 
 
 # ---- run sessions ----------------------------------------------------------

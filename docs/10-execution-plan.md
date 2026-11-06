@@ -305,6 +305,13 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 
 **Exit:** on screen, a Studio prompt builds a widget from run data and seeded history. Clicking a row opens its lineage timeline. The mandate diff is visible.
 
+> 🟡 **In progress (2026-11-06).**
+> - **Done:** 2a seeded history and 2c tests.
+>   - `app/seed.py` runs 30 synthetic mandates through the real `runs.step_*` functions in replay. That gives about 60 purchases over 28 days, covering firewall decisions, approvals and rejections, captures, delivery proof, disputes answered by the desk's own recommendation, and stage 10 calibration. The history ledger's hash chain verifies.
+>   - `GET /api/studio/rows?history=true` merges it with the current run, each row tagged `source: run | seeded`. `GET /api/studio/history/verify` checks the chain. Run `backend/scripts/seed_history.py` for a summary.
+>   - Tests: `test_studio_row_columns_are_stable` freezes `s09_observe.ROW_COLUMNS` and checks the frontend's Studio field ids against it, and `test_seeded_history_comes_from_the_real_code_path` (`tests/test_studio_contract.py`, 6 tests).
+> - **Next:** the three custom widgets, the lineage timeline from a grid row, `GET /api/runs/{id}/calibration` and the mandate diff.
+
 ---
 
 ### Phase 3: Defend + post-purchase ops (Sat Nov 7 – Mon Nov 9). Cluster C ~15%, cluster D ~10%.
@@ -432,7 +439,16 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 
 ---
 
-## 6. What we are not building
+## 6. Backlog: carried forward
+
+Open items from later phases, kept here so they aren't lost while Phase 2 runs. Pick them up in Phase 3 or 4.
+
+- [ ] **Live `provide-evidence` submission.** Multipart, with the PDF brief, on a real sandbox dispute. Only the replay double has received it so far.
+- [ ] **Webhook signature verification against a real sandbox event.** `SandboxPayPal.verify_webhook` exists but has never checked a real PayPal event. It still takes a parsed dict rather than the raw body (pain point #11).
+- [ ] **On-screen payout block and release.** Stage 7 payout without the VERIFIED and RECONCILED gate tokens is refused, then released. It's proven in tests and the demo arc, but not shown in the UI.
+- [ ] **Stages 6, 7 and 10 are still scripted.** Invoice forensics, payout release and calibration run in replay and seeded history, not on live sandbox objects.
+
+## 7. What we are not building
 
 | Cut | Why |
 |---|---|
@@ -445,7 +461,7 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 
 ---
 
-## 7. Team split (3 people)
+## 8. Team split (3 people)
 
 | Person | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phases 4–5 |
 |---|---|---|---|---|---|

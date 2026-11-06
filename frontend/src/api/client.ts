@@ -101,6 +101,7 @@ export type LedgerView = { chain_ok: boolean; first_bad_seq: number | null; entr
 // One row per purchase lineage from GET /api/studio/rows. Money arrives as decimal strings.
 export type StudioRow = {
   lineage_id: string
+  source: 'run' | 'demo' | 'seeded' // seeded = synthetic history run through the real step functions
   created_at: string // ISO-8601 UTC from the ledger
   updated_at: string
   order_id?: string
@@ -231,8 +232,12 @@ export const api = {
   attack: (id: string) => call<{ route: string; reasons: string[]; latency_ms: number }>('POST', `${base(id)}/attack`),
   ledger: (id: string) => call<LedgerView>('GET', `${base(id)}/ledger`),
   events: (id: string) => new EventSource(`/api${base(id)}/events`),
-  studioRows: (runId?: string) =>
-    call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', runId ? `/studio/rows?run_id=${encodeURIComponent(runId)}` : '/studio/rows'),
+  studioRows: (runId?: string, history = false) => {
+    const q = new URLSearchParams()
+    if (runId) q.set('run_id', runId)
+    if (history) q.set('history', 'true')
+    return call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', `/studio/rows${q.size ? `?${q}` : ''}`)
+  },
   demoRun: () => call<unknown>('POST', '/demo/run'),
   disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
   dispute: (id: string) => call<DisputeDetail>('GET', `/disputes/${id}`),
