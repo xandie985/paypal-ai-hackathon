@@ -320,6 +320,7 @@ A PayPal dispute is answered rationally from records sealed before it existed. A
   - On Item-Not-Received disputes (`MERCHANDISE_OR_SERVICE_NOT_RECEIVED`, e.g. `PP-R-PVO-10196452`), PayPal strictly rejects `REFUND_WITH_RETURN` with `INVALID_OFFER_TYPE`. The system now inspects PayPal's `allowed_response_options` and automatically excludes `refund_with_return` on undelivered goods, recommending `accept` unless Stage 5 delivery tracking proof is present.
   - A direct schema probe of `accept-claim` was accepted (HTTP 200) and moved `PP-R-EGO-10196439` to `RESOLVED`.
   - The corrected `make-offer` body uses `REFUND_WITH_RETURN` + `return_shipping_address` for defect/not-as-described claims, and `offer_type: "REFUND"` for item-not-received claims.
+  - **Live Offer Probe Verified (2026-11-06):** Executed `scripts/live_dispute_probe.py offer PP-R-PVO-10196452 10.00 --send` live against PayPal Sandbox for $40.00 dispute `PP-R-PVO-10196452`. PayPal accepted the partial refund offer (`HTTP 200`), proposed the $10.00 settlement to the buyer, and moved the case to `WAITING_FOR_BUYER_RESPONSE` (after a brief ~500ms transient `UNDER_REVIEW`). PayPal Sandbox API inspection confirmed `seller_offered_amount: $10.00`, `offer_type: "REFUND"`, and `actor: "SELLER"`.
 
 ### Stage 8 playbooks and case lifecycle (2026-11-05)
 

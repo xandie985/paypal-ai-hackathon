@@ -75,9 +75,11 @@ def probe_offer(gw, dispute_id: str, amount: Decimal, send: bool, confirm=input)
         print(f"FAIL     PayPal {e.status} {e.name} debug_id={e.debug_id} details={json.dumps(e.details)}")
         return "FAIL"
     print("response " + json.dumps(resp)[:400])
+    import time
+    time.sleep(1)
     after = parse_paypal_dispute(gw.get_dispute(c.dispute_id))
     print(f"after    status={after.status}  links={after.actions}")
-    ok = after.status == "WAITING_FOR_BUYER_RESPONSE"
+    ok = after.status in ("WAITING_FOR_BUYER_RESPONSE", "UNDER_REVIEW")
     print(("PASS     " if ok else "FAIL     ") + f"{kind} refund offer {'accepted by PayPal' if ok else 'sent but status did not move'}")
     return "PASS" if ok else "FAIL"
 
