@@ -11,6 +11,7 @@ API, not an agent decision: it writes nothing to the evidence ledger. Note what 
 
 import json
 import sys
+import time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -75,13 +76,38 @@ def probe_offer(gw, dispute_id: str, amount: Decimal, send: bool, confirm=input)
         print(f"FAIL     PayPal {e.status} {e.name} debug_id={e.debug_id} details={json.dumps(e.details)}")
         return "FAIL"
     print("response " + json.dumps(resp)[:400])
-    import time
-    time.sleep(1)
-    after = parse_paypal_dispute(gw.get_dispute(c.dispute_id))
-    print(f"after    status={after.status}  links={after.actions}")
-    ok = after.status in ("WAITING_FOR_BUYER_RESPONSE", "UNDER_REVIEW")
-    print(("PASS     " if ok else "FAIL     ") + f"{kind} refund offer {'accepted by PayPal' if ok else 'sent but status did not move'}")
+    # PayPal can sit in UNDER_REVIEW for a moment after an offer. Poll for the settled state, but only
+    # PASS when PayPal's own offer record matches what we sent: status alone can move for other reasons.
+    after_raw, after = raw, c
+    for _ in range(10):
+        time.sleep(1)
+        after_raw = gw.get_dispute(c.dispute_id)
+        after = parse_paypal_dispute(after_raw)
+        if after.status != "UNDER_REVIEW":
+            break
+    offer = recorded_offer(after_raw)
+    print(f"after    status={after.status}  links={after.actions}  offer={json.dumps(offer)}")
+    offered = (offer.get("seller_offered_amount") or {}).get("value")
+    matches = offered is not None and Decimal(offered) == amount and offer.get("offer_type") == "REFUND"
+    ok = matches and after.status == "WAITING_FOR_BUYER_RESPONSE"
+    if ok:
+        print(f"PASS     PayPal recorded a {kind} REFUND offer of {offered} {c.currency} and is waiting on the buyer")
+    else:
+        why = "offer on record doesn't match what we sent" if not matches else f"status is {after.status}, not WAITING_FOR_BUYER_RESPONSE"
+        print(f"FAIL     {why}")
     return "PASS" if ok else "FAIL"
+
+
+def recorded_offer(raw: dict) -> dict:
+    """PayPal's record of the latest offer: seller_offered_amount, offer_type and the history entry."""
+    offer = raw.get("offer") or {}
+    history = offer.get("history") or []
+    return {
+        "seller_offered_amount": offer.get("seller_offered_amount"),
+        "buyer_requested_amount": offer.get("buyer_requested_amount"),
+        "offer_type": offer.get("offer_type") or (history[-1].get("offer_type") if history else None),
+        "last_event": {k: history[-1].get(k) for k in ("actor", "event_type", "offer_time")} if history else None,
+    }
 
 
 if __name__ == "__main__":
