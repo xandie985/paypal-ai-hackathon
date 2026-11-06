@@ -123,6 +123,21 @@ export type StudioRow = {
   dispute_outcome?: string
   supplier_trust?: number
 }
+/** Related tables of the PayPal sandbox account behind the Command Center's PayPal pages (GET /studio/paypal). */
+type PaypalRow = Record<string, string | number | boolean | null>
+export type PaypalTables = {
+  source: 'live' | 'replay' // live = read from the sandbox account now; replay = fixed fixture
+  asOf: string
+  customers: PaypalRow[]
+  invoices: PaypalRow[]
+  invoiceItems: PaypalRow[]
+  invoicePayments: PaypalRow[]
+  products: PaypalRow[]
+  plans: PaypalRow[]
+  transactions: PaypalRow[]
+  payouts: PaypalRow[]
+  balances: PaypalRow[]
+}
 export type RunEvent = { seq: number; stage: string; event: string; [k: string]: unknown }
 export type MandateInput = {
   principal: string
@@ -248,6 +263,7 @@ export const api = {
     if (history) q.set('history', 'true')
     return call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', `/studio/rows${q.size ? `?${q}` : ''}`)
   },
+  studioPaypal: () => call<PaypalTables>('GET', '/studio/paypal'),
   studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
   studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
   runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),

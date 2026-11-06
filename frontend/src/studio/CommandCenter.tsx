@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AgStudioAiModule,
   enableStudioDevValidations,
@@ -7,13 +7,15 @@ import {
   type AgFilterOperator,
   type AgFilterState,
   type AgReportState,
+  type AgStudioApi,
   type AgStudioMode,
 } from 'ag-studio'
 import { AgStudio, AgStudioProvider } from 'ag-studio-react'
-import { api, type StudioRow } from '../api/client'
+import { api, type PaypalTables, type StudioRow } from '../api/client'
 import { MandateDiff } from '../features/learn/MandateDiff'
 import { LineageDrawer } from '../features/lineage/LineageDrawer'
 import { buildAi } from './ai'
+import { paypalPages, paypalSources } from './paypalReport'
 import { pactguardTheme } from './theme'
 
 if (import.meta.env.DEV) enableStudioDevValidations()
@@ -78,7 +80,7 @@ const fields: AgFieldDefinition[] = [
 
 const MONEY = ['amount', 'savings', 'payout_net'] as const
 
-function toSources(rows: StudioRow[]): AgDataSourcesDefinition {
+function toSources(rows: StudioRow[], paypal: PaypalTables | null): AgDataSourcesDefinition {
   const data = rows.map((r) => {
     const out: Record<string, string | number | Date | null> = { ...r }
     for (const k of MONEY) out[k] = r[k] == null ? null : Number(r[k])
@@ -87,9 +89,20 @@ function toSources(rows: StudioRow[]): AgDataSourcesDefinition {
   // Newest first, so the table grows from the top (the backend already sorts; keep it if rows are merged).
   data.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
   for (const row of data) for (const k of DATES) row[k] = row[k] ? new Date(String(row[k])) : null
+  const ledger = { id: 'transactions', name: 'Transactions', description: 'One row per purchase lineage', data, fields }
+  if (!paypal) {
+    return { description: 'PactGuard AI procurement runs: one row per purchase, built from the hash-chained evidence ledger.', sources: [ledger] }
+  }
+  const pp = paypalSources(paypal)
   return {
-    description: 'PactGuard AI procurement runs: one row per purchase, built from the hash-chained evidence ledger.',
-    sources: [{ id: 'transactions', name: 'Transactions', description: 'One row per purchase lineage', data, fields }],
+    description:
+      'PactGuard AI procurement runs ("Transactions": one row per purchase, from the hash-chained evidence ledger) next to the merchant ' +
+      `PayPal sandbox account's own data (${paypal.source === 'live' ? 'read live from the sandbox' : 'a fixed replay fixture'}): invoices, line items, payments, ` +
+      'catalog products, billing plans, the account ledger, payouts and balances. Invoices are in USD or EUR and are not converted, so filter by currency before summing money.',
+    sources: [ledger, ...pp.sources],
+    relationships: pp.relationships,
+    calendars: pp.calendars,
+    expressions: pp.expressions,
   }
 }
 
@@ -166,6 +179,18 @@ const report: AgReportState = {
   ],
 }
 
+// Studio keeps no page names and draws no page tabs; the host does both.
+const PAGE_TITLES: Record<string, string> = {
+  overview: 'Purchases',
+  revenue: 'Revenue',
+  receivables: 'Receivables',
+  cash: 'Cash',
+  catalogue: 'Catalogue',
+}
+
+// One report with page tabs: the purchase ledger's overview first, then the PayPal account pages when they loaded.
+const reportWith = (paypal: PaypalTables | null): AgReportState => (paypal ? { ...report, pages: [...(report.pages ?? []), ...paypalPages] } : report)
+
 export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [rows, setRows] = useState<StudioRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -175,18 +200,28 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   // Studio reads `ai` once, when it is created, so the assistant is decided before it mounts:
   // undefined = still asking the server, null = no key configured (the assistant stays hidden).
   const [aiModel, setAiModel] = useState<string | null | undefined>(undefined)
+  // Studio reads its data and initialState once, when it is created, so everything loads before it mounts.
+  // The PayPal tables are optional: if the sandbox read fails, the purchase ledger still shows.
+  const [paypal, setPaypal] = useState<PaypalTables | null | undefined>(undefined)
+  const apiRef = useRef<AgStudioApi | null>(null)
+  const [pageId, setPageId] = useState(report.selectedPageId)
+  const [paypalError, setPaypalError] = useState<string | null>(null)
   const load = useCallback(() => {
     api.studioRows(runId, true).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
   }, [runId])
+  useEffect(() => {
+    api.studioPaypal().then(setPaypal).catch((e) => { setPaypal(null); setPaypalError(String(e)) })
+  }, [])
   useEffect(load, [load])
   useEffect(() => {
     api.aiConfig().then((c) => setAiModel(c.configured ? c.model : null)).catch(() => setAiModel(null))
   }, [])
-  const data = useMemo(() => (rows ? toSources(rows) : null), [rows])
+  const data = useMemo(() => (rows && paypal !== undefined ? toSources(rows, paypal) : null), [rows, paypal])
+  const initialState = useMemo(() => reportWith(paypal ?? null), [paypal])
   const ai = useMemo(() => (aiModel ? buildAi(aiModel) : undefined), [aiModel])
 
   if (error) return <p className="m-6 rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">Studio data failed: {error}</p>
-  if (!data || !rows || aiModel === undefined) return <p className="m-6 text-sm text-slate-500">Loading Studio data…</p>
+  if (!data || !rows || aiModel === undefined || paypal === undefined) return <p className="m-6 text-sm text-slate-500">Loading Studio data…</p>
   if (rows.length === 0)
     return (
       <div className="m-6 space-y-2 text-sm">
@@ -207,10 +242,34 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
     }
   }
 
+  const selectPage = (id: string) => {
+    const api = apiRef.current
+    if (api) api.setState({ ...api.getState(), selectedPageId: id })
+  }
+
   return (
     <div className="flex h-full flex-col">
+      {paypal && (
+        <div className="flex gap-1 border-b border-slate-200 bg-white px-6 pt-1.5" role="tablist" aria-label="Report pages">
+          {(initialState.pages ?? []).map((p) => (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={p.id === pageId}
+              className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${p.id === pageId ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+              onClick={() => selectPage(p.id)}
+            >
+              {PAGE_TITLES[p.id] ?? p.id}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-1.5">
-        <span className="text-xs text-slate-500">Click a purchase row to trace its sealed lineage.</span>
+        <span className="text-xs text-slate-500">
+          Click a purchase row to trace its sealed lineage.
+          {paypal && <> PayPal pages: {paypal.source === 'live' ? 'live sandbox account' : 'replay fixture'}.</>}
+          {paypalError && <span className="text-rose-700"> PayPal pages unavailable: {paypalError}</span>}
+        </span>
         <div className="flex gap-1">
           <button
             className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
@@ -228,7 +287,14 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
       </div>
       <div className="relative min-h-0 flex-1" onClick={onGridClick}>
         <AgStudioProvider licenseKey={licenseKey} modules={ai ? modules : undefined}>
-          <AgStudio style={{ height: '100%', width: '100%' }} theme={pactguardTheme} data={data} initialState={report} mode={mode} ai={ai} />
+          <AgStudio style={{ height: '100%', width: '100%' }} theme={pactguardTheme} data={data} initialState={initialState}
+            mode={mode}
+            ai={ai}
+            onApiReady={(e) => {
+              apiRef.current = e.api
+            }}
+            onStateUpdated={(e) => setPageId(e.state.selectedPageId)}
+          />
         </AgStudioProvider>
         {lineage && <LineageDrawer key={lineage} lineage={lineage} onClose={() => setLineage(null)} />}
         {diff && <MandateDiff runId={runId} onClose={() => setDiff(false)} />}

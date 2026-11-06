@@ -46,6 +46,7 @@ To use the live sandbox, set `REPLAY_MODE=false` and fill in the PayPal and Chan
 | 7 Webhooks | Real endpoint and raw-body verification, unit-tested. Not yet checked against a real PayPal sandbox event. |
 | 8 Defend | Reads **real sandbox disputes** and answers through PayPal's dispute actions. The multipart `provide-evidence` upload is verified against the replay gateway, not yet against a live case. |
 | 9 Observe | Real. AG Studio over the ledger, with a seeded history of past purchases built through the same step functions. |
+| 9 Observe, PayPal pages | Real code, **two data modes**. The Command Center's Revenue, Receivables, Cash and Catalogue pages read the merchant's own PayPal account (invoices, payments, catalog products, billing plans, Transaction Search for the last 31 days, payouts, balances) through `GET /api/studio/paypal`. **Live** (`REPLAY_MODE=false` with sandbox keys) reads the sandbox account itself; the public replay demo serves a small **fixed fixture** of PayPal-shaped responses (fictional merchant, dated 2026-11-05) through the same transformation code. The fixture is not your sandbox data, and the live read has only been exercised against a mock PayPal so far. These pages describe the account, not the agent's purchases. |
 
 ## Evaluation
 
@@ -80,9 +81,14 @@ backend/
   app/integrations/   PayPal (replay + sandbox), Channel3, Claude
   app/runs.py   run sessions: the loop behind step functions a UI can pause
   app/api.py    REST + SSE, webhooks, Studio rows and lineage   ·   app/ai_proxy.py  Studio assistant proxy
+  app/studio_paypal.py   PayPal account tables for the Command Center's PayPal pages (live sandbox read or fixture)
   eval/         the three evaluations
 ```
 
 ## Research and planning
 
 The research behind the project is in [`docs/`](docs/): problem decomposition, the literature, 12 verified user pain points, competitors, the idea ranking, and the implementation and execution plans ([`09`](docs/09-implementation-framework.md) maps every stage and guard to code and a test; [`10`](docs/10-execution-plan.md) is the phased plan and tracker; [`11`](docs/11-dashboard-ui-plan.md) is the UI plan).
+
+## Credits
+
+The Command Center's PayPal pages (Revenue, Receivables, Cash, Catalogue), their data sources and the PayPal account tables behind them are adapted from the PayPal AI Hackathon's AG Grid boilerplate, [paypaldev/hackathon-paypal-ag-grid-boilerplate](https://github.com/paypaldev/hackathon-paypal-ag-grid-boilerplate) (`lib/paypal.ts`, `lib/dashboard-data.ts`, `app/dashboard/studio/`). The boilerplate is ported to Python and React here, and its repository carries no licence file, so we use it as the hackathon's provided starting point.

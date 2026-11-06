@@ -270,6 +270,17 @@ class SandboxPayPal:
             raise PayPalAPIError.from_response(r)
         return r.json()
 
+    def get_json(self, path: str, params: dict | None = None, attempts: int = 4) -> dict:
+        """Read-only GET for account reporting. Retries 429 and 5xx with backoff (the reporting APIs rate-limit)."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._get(path, params)
+            except PayPalAPIError as e:
+                if attempt == attempts or not (e.status == 429 or e.status >= 500):
+                    raise
+                time.sleep(2**attempt * 0.25)
+        raise AssertionError("unreachable")
+
     def list_disputes(self):
         return self._get("/v1/customer/disputes", {"page_size": 50}).get("items", [])
 

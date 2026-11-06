@@ -12,7 +12,8 @@ const DOMAIN = `You are the analyst inside PactGuard AI's Command Center, an AG 
 - "route" is the mandate firewall's decision: AUTO_SETTLE (within the auto-approve threshold), HUMAN_APPROVAL (a person must approve) or BLOCKED (a rule failed; see "blocked_reasons").
 - "status" is CAPTURED once PayPal captured the payment, or REJECTED if a human declined it. Only captured purchases are real spend.
 - "savings" is measured against the retail baseline. "supplier_trust" is the per-vendor score (0-100%) learned from delivery proof and dispute outcomes. "dispute_outcome" is WON, LOST or SETTLED.
-- All money is USD. Prefer the existing fields over inventing new ones, and say plainly when the data cannot answer a question.`
+- The other tables are the merchant's own PayPal sandbox account, not the agent's purchases (they can be absent if the sandbox read failed): "PayPal Customers" (invoice recipients), "PayPal Invoices" (status, due date, paid, outstanding, overdue and aging), "Invoice Line Items", "Invoice Payments" (payments and refunds; "Net Cash" is signed), "PayPal Products", "Billing Plans" (monthly-normalised price, trial days), "PayPal Transactions" (the account ledger from Transaction Search, last 31 days, signed amounts), "PayPal Payouts" (positive amounts, grouped into campaigns) and "PayPal Balances". Invoices are related to customers, and line items and payments to invoices; plans to products. Their pages are Revenue, Receivables, Cash and Catalogue. Invoices are USD or EUR and not converted, so filter by currency before summing them. Never mix the two groups of tables in one answer without saying which is which.
+- Purchase amounts are USD. Prefer the existing fields over inventing new ones, and say plainly when the data cannot answer a question.`
 
 const PROMPT_STARTERS: AgAiPromptStarter[] = [
   {
@@ -26,6 +27,10 @@ const PROMPT_STARTERS: AgAiPromptStarter[] = [
   {
     label: 'Lost disputes',
     prompt: 'Which purchases ended in a LOST or SETTLED dispute, and which suppliers were they from?',
+  },
+  {
+    label: 'Overdue invoices',
+    prompt: 'Which PayPal invoices are overdue, how much is outstanding per currency, and which customers owe it?',
   },
   {
     label: 'Savings by category',
