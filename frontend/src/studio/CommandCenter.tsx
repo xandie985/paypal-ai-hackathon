@@ -11,6 +11,8 @@ import {
 } from 'ag-studio'
 import { AgStudio, AgStudioProvider } from 'ag-studio-react'
 import { api, type StudioRow } from '../api/client'
+import { MandateDiff } from '../features/learn/MandateDiff'
+import { LineageDrawer } from '../features/lineage/LineageDrawer'
 import { pactguardTheme } from './theme'
 
 if (import.meta.env.DEV) enableStudioDevValidations()
@@ -167,6 +169,8 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [rows, setRows] = useState<StudioRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<AgStudioMode>('view')
+  const [lineage, setLineage] = useState<string | null>(null)
+  const [diff, setDiff] = useState(false)
   const load = useCallback(() => {
     api.studioRows(runId, true).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
   }, [runId])
@@ -185,17 +189,41 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
       </div>
     )
 
+  // Studio has no row-click event, so read the purchase's lineage ID off the clicked grid row.
+  const onGridClick = (e: React.MouseEvent) => {
+    const row = (e.target as HTMLElement).closest('[role="row"]')
+    const id = row?.textContent?.match(/PG-[0-9a-f]{16}\.[0-9a-f]{10}/)?.[0]
+    if (id) {
+      setDiff(false)
+      setLineage(id)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex justify-end border-b border-slate-200 bg-white px-6 py-1.5">
-        <button className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100" onClick={() => setMode(mode === 'view' ? 'edit' : 'view')}>
-          {mode === 'view' ? 'Edit report' : 'Done editing'}
-        </button>
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-1.5">
+        <span className="text-xs text-slate-500">Click a purchase row to trace its sealed lineage.</span>
+        <div className="flex gap-1">
+          <button
+            className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+            onClick={() => {
+              setLineage(null)
+              setDiff(!diff)
+            }}
+          >
+            Mandate v1 → v2
+          </button>
+          <button className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100" onClick={() => setMode(mode === 'view' ? 'edit' : 'view')}>
+            {mode === 'view' ? 'Edit report' : 'Done editing'}
+          </button>
+        </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1" onClick={onGridClick}>
         <AgStudioProvider licenseKey={licenseKey} modules={modules}>
           <AgStudio style={{ height: '100%', width: '100%' }} theme={pactguardTheme} data={data} initialState={report} mode={mode} />
         </AgStudioProvider>
+        {lineage && <LineageDrawer key={lineage} lineage={lineage} onClose={() => setLineage(null)} />}
+        {diff && <MandateDiff runId={runId} onClose={() => setDiff(false)} />}
       </div>
     </div>
   )

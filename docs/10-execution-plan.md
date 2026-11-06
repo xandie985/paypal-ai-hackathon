@@ -321,8 +321,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 - [x] Widget 2: firewall routes by week (`column-chart-stacked` on `created_at::week`)
 - [x] Widget 3: dispute outcomes by supplier (`bar-chart-stacked`, disputed rows only) beside supplier trust (new `supplier_trust` column, same formula as `s10_learn.supplier_trust`; payout attacks unscored)
 - [x] KPI tiles: captured spend, saved vs retail (captured), purchases, blocked by the firewall
-- [ ] Lineage timeline: click a grid row to see its ledger entries with `entry_hash` / `prev_hash` and the chain badge
-- [ ] `GET /api/runs/{id}/calibration` (before, after, changes, trust) and the mandate v1 → v2 diff
+- [x] Lineage timeline: click a grid row to see its ledger entries with `entry_hash` / `prev_hash` and the chain badge (`GET /api/studio/lineage/{id}`, `LineageDrawer`)
+- [x] `GET /api/runs/{id}/calibration` (read-only preview) and the mandate v1 → v2 diff (`GET /api/studio/calibrations` for the seeded history, `MandateDiff` panel)
 - [ ] Studio Agent natural-language prompts over the data (read-only: it can't move money)
 - [ ] Exit check: a Studio prompt builds a widget from run plus seeded data, a row opens its lineage, the mandate diff is visible
 

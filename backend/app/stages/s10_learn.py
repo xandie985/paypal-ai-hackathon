@@ -36,7 +36,8 @@ def supplier_trust(ledger: EvidenceLedger, prefix: str) -> dict[str, float]:
     return {s: trust_score(good[s], bad[s]) for s in set(good) | set(bad)}
 
 
-def calibrate(ledger: EvidenceLedger, mandate: Mandate, mandate_lid: str) -> dict:
+def plan(ledger: EvidenceLedger, mandate: Mandate, mandate_lid: str) -> dict:
+    """What calibration would do. Writes nothing, so the UI can preview it at any time."""
     trust = supplier_trust(ledger, mandate_lid)
     lost = [e for e in ledger.entries(mandate_lid, "dispute_outcome") if e.payload["outcome"] == "LOST"]
     approvals = len(ledger.entries(mandate_lid, "approval"))
@@ -54,11 +55,38 @@ def calibrate(ledger: EvidenceLedger, mandate: Mandate, mandate_lid: str) -> dic
         threshold = q(threshold * Decimal("1.10"))
         changes.append(f"auto_threshold {mandate.auto_threshold} -> {threshold} ({approvals} approvals, 0 rejections)")
 
-    if not changes:
+    new = None
+    if changes:
+        new = mandate.model_copy(
+            update={
+                "vendor_allowlist": allow,
+                "auto_threshold": threshold,
+                "version": mandate.version + 1,
+                "parent_digest": mandate.digest(),
+            }
+        )
+    return {"trust": trust, "changes": changes, "new": new}
+
+
+def mandate_diff(before: dict, after: dict) -> list[dict]:
+    """Field-level difference between two mandate versions, for the before/after view."""
+    out = []
+    for k in before:
+        if k in ("version", "parent_digest") or before[k] == after.get(k):
+            continue
+        row = {"field": k, "before": before[k], "after": after.get(k)}
+        if isinstance(before[k], list):
+            row["removed"] = [x for x in before[k] if x not in after.get(k, [])]
+            row["added"] = [x for x in after.get(k, []) if x not in before[k]]
+        out.append(row)
+    return out
+
+
+def calibrate(ledger: EvidenceLedger, mandate: Mandate, mandate_lid: str) -> dict:
+    p = plan(ledger, mandate, mandate_lid)
+    trust, changes, new = p["trust"], p["changes"], p["new"]
+    if new is None:
         return {"changed": False, "trust": trust, "mandate": mandate, "lineage_id": mandate_lid, "changes": []}
-    new = mandate.model_copy(
-        update={"vendor_allowlist": allow, "auto_threshold": threshold, "version": mandate.version + 1, "parent_digest": mandate.digest()}
-    )
     new_lid = register_mandate(ledger, new)
     ledger.append(mandate_lid, "10-learn", "calibration", {"trust": trust, "changes": changes, "next_mandate": new_lid})
     return {
@@ -70,3 +98,28 @@ def calibrate(ledger: EvidenceLedger, mandate: Mandate, mandate_lid: str) -> dic
         "before": mandate.model_dump(mode="json"),
         "after": new.model_dump(mode="json"),
     }
+
+
+def calibrations(ledger: EvidenceLedger) -> list[dict]:
+    """Every calibration already written to a ledger, newest first, with both mandate versions."""
+    out = []
+    for e in ledger.entries(kind="calibration"):
+        before = ledger.latest(e.lineage_id, "mandate")
+        after = ledger.latest(e.payload["next_mandate"], "mandate")
+        if not before or not after:
+            continue
+        b, a = before.payload["mandate"], after.payload["mandate"]
+        out.append(
+            {
+                "created_at": e.created_at,
+                "from_lineage": e.lineage_id,
+                "to_lineage": e.payload["next_mandate"],
+                "changes": e.payload["changes"],
+                "trust": e.payload["trust"],
+                "before": b,
+                "after": a,
+                "diff": mandate_diff(b, a),
+                "parent_digest_linked": a.get("parent_digest") == before.payload["digest"],
+            }
+        )
+    return out[::-1]

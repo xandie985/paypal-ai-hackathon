@@ -16,7 +16,7 @@ from .domain.models import DeliveryReport, Mandate
 from .integrations.llm import make_llm
 from .integrations.paypal import PayPalAPIError, make_gateway
 from .orchestrator import Runtime, run_demo
-from .stages import s05_verify, s08_defend
+from .stages import s05_verify, s08_defend, s10_learn
 from .stages.s09_observe import kpis, transaction_rows, with_supplier_trust
 
 router = APIRouter(prefix="/api")
@@ -80,6 +80,30 @@ def studio_rows(run_id: str | None = None, history: bool = False):
         rows.sort(key=lambda r: r["created_at"], reverse=True)
     rows = with_supplier_trust(rows)
     return {"rows": rows, "kpis": kpis(rows)}
+
+
+@router.get("/studio/lineage/{lineage_id}")
+def studio_lineage(lineage_id: str):
+    """One purchase's sealed ledger entries, from whichever ledger holds it (runs first, then seeded history)."""
+    candidates = [("run", r.rt.ledger) for r in reversed(list(runs.RUNS.values()))] + [("seeded", history_ledger())]
+    for source, ledger in candidates:
+        entries = ledger.entries(lineage_id)
+        if entries:
+            ok, bad = ledger.verify()
+            return {
+                "source": source,
+                "lineage_id": lineage_id,
+                "chain_ok": ok,
+                "first_bad_seq": bad,
+                "entries": [e.__dict__ for e in entries],
+            }
+    raise HTTPException(404, f"no ledger entries for {lineage_id}")
+
+
+@router.get("/studio/calibrations")
+def studio_calibrations():
+    """Mandate v1 -> v2 changes that stage 10 already made across the seeded history."""
+    return {"calibrations": s10_learn.calibrations(history_ledger())}
 
 
 @router.get("/studio/history/verify")
@@ -173,6 +197,23 @@ async def run_events(run_id: str, follow: bool = True):
             run.subscribers.remove(q)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/runs/{run_id}/calibration")
+def run_calibration(run_id: str):
+    """What stage 10 would change for this run's mandate right now. Read-only: nothing is written."""
+    run = _run(run_id)
+    p = s10_learn.plan(run.rt.ledger, run.mandate, run.mandate_lineage)
+    before = run.mandate.model_dump(mode="json")
+    after = p["new"].model_dump(mode="json") if p["new"] else None
+    return {
+        "changed": after is not None,
+        "changes": p["changes"],
+        "trust": p["trust"],
+        "before": before,
+        "after": after,
+        "diff": s10_learn.mandate_diff(before, after) if after else [],
+    }
 
 
 @router.get("/runs/{run_id}/ledger")

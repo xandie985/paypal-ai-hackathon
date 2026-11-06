@@ -239,6 +239,9 @@ export const api = {
     if (history) q.set('history', 'true')
     return call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', `/studio/rows${q.size ? `?${q}` : ''}`)
   },
+  studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
+  studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
+  runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),
   demoRun: () => call<unknown>('POST', '/demo/run'),
   disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
   dispute: (id: string) => call<DisputeDetail>('GET', `/disputes/${id}`),
@@ -253,4 +256,28 @@ export const api = {
   simulateReturn: (id: string) => call<unknown>('POST', `/disputes/${id}/simulate-return`, {}),
   recordDelivery: (d: DeliveryInput) => call<{ verdict: string; problems: string[] }>('POST', '/deliveries', d),
   briefUrl: (id: string) => `/api/disputes/${id}/brief.pdf`,
+}
+
+export type FullLedgerEntry = LedgerEntry & { payload: Record<string, unknown>; payload_hash: string }
+export type LineageView = { source: 'run' | 'seeded'; lineage_id: string; chain_ok: boolean; first_bad_seq: number | null; entries: FullLedgerEntry[] }
+export type MandateJson = Record<string, unknown> & { version: number; auto_threshold: string; vendor_allowlist: string[] }
+export type MandateDiffRow = { field: string; before: unknown; after: unknown; removed?: string[]; added?: string[] }
+export type RunCalibration = {
+  changed: boolean
+  changes: string[]
+  trust: Record<string, number>
+  before: MandateJson
+  after: MandateJson | null
+  diff: MandateDiffRow[]
+}
+export type Calibration = {
+  created_at: string
+  from_lineage: string
+  to_lineage: string
+  changes: string[]
+  trust: Record<string, number>
+  before: MandateJson
+  after: MandateJson
+  diff: MandateDiffRow[]
+  parent_digest_linked: boolean
 }
