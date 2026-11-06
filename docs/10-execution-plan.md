@@ -312,6 +312,20 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 >   - Tests: `test_studio_row_columns_are_stable` freezes `s09_observe.ROW_COLUMNS` and checks the frontend's Studio field ids against it, and `test_seeded_history_comes_from_the_real_code_path` (`tests/test_studio_contract.py`, 6 tests).
 > - **Next:** the three custom widgets, the lineage timeline from a grid row, `GET /api/runs/{id}/calibration` and the mandate diff.
 
+**Phase 2 task tracker** (branch `claude/phase-2-studio`)
+
+- [x] Seeded history through the real step functions (`app/seed.py`, `?history=true`)
+- [x] Frozen Studio row contract, checked against the frontend (`tests/test_studio_contract.py`)
+- [ ] Decide: keep the single flat table, or build the multi-table model (doc 11 §8, `GET /api/studio/sources`) before the widgets
+- [ ] Widget 1: savings vs baseline by vendor and category
+- [ ] Widget 2: firewall routes over time (auto / approval / blocked), now possible with `created_at`
+- [ ] Widget 3: dispute outcomes and supplier trust (WON / LOST / SETTLED, stage 10 scores)
+- [ ] KPI tiles from `kpis()`
+- [ ] Lineage timeline: click a grid row to see its ledger entries with `entry_hash` / `prev_hash` and the chain badge
+- [ ] `GET /api/runs/{id}/calibration` (before, after, changes, trust) and the mandate v1 → v2 diff
+- [ ] Studio Agent natural-language prompts over the data (read-only: it can't move money)
+- [ ] Exit check: a Studio prompt builds a widget from run plus seeded data, a row opens its lineage, the mandate diff is visible
+
 ---
 
 ### Phase 3: Defend + post-purchase ops (Sat Nov 7 – Mon Nov 9). Cluster C ~15%, cluster D ~10%.
