@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -55,15 +56,17 @@ def ledger_verify():
 
 
 _history = None
+_history_lock = threading.Lock()
 
 
 def history_ledger():
     """Seeded history, built once per process through the real step functions (app/seed.py)."""
     global _history
-    if _history is None:
-        from .seed import build_history
+    with _history_lock:  # two first requests must not both pay for (and race on) the build
+        if _history is None:
+            from .seed import build_history
 
-        _history = build_history()
+            _history = build_history()
     return _history
 
 
@@ -152,7 +155,9 @@ def _guarded(fn, *args):
 async def start_run(body: StartRun | None = None):
     body = body or StartRun()
     try:
-        run = await runs.start_run(settings, body.mandate, body.needs)
+        # A live run makes blocking HTTP calls (Channel3, PayPal) for seconds. Running it on a worker thread with
+        # its own loop keeps health checks, SSE keepalives and other requests responsive meanwhile.
+        run = await run_in_threadpool(lambda: asyncio.run(runs.start_run(settings, body.mandate, body.needs)))
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return run.snapshot()
@@ -177,8 +182,9 @@ async def run_events(run_id: str, follow: bool = True):
 
     async def stream():
         q: asyncio.Queue = asyncio.Queue()
+        sub = (asyncio.get_running_loop(), q)
         backlog = list(run.events)
-        run.subscribers.append(q)  # subscribe before yielding so nothing is missed between backlog and live
+        run.subscribers.append(sub)  # subscribe before yielding so nothing is missed between backlog and live
         try:
             seen = len(backlog)
             for e in backlog:
@@ -196,7 +202,7 @@ async def run_events(run_id: str, follow: bool = True):
                 if e["seq"] >= seen:
                     yield f"data: {json.dumps(e)}\n\n"
         finally:
-            run.subscribers.remove(q)
+            run.subscribers.remove(sub)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 

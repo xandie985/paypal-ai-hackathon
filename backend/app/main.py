@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .ai_proxy import router as ai_router
 from .api import router
@@ -8,7 +11,7 @@ from .config import settings
 app = FastAPI(title="PactGuard AI")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -28,3 +31,15 @@ def health():
         "channel3_configured": bool(settings.channel3_api_key),
         "llm_configured": bool(settings.anthropic_api_key),
     }
+
+
+def mount_frontend(application: FastAPI, dist: str) -> bool:
+    """Serve the built frontend at "/" so one web service hosts both. Mounted after every /api route, so those
+    win. The UI routes with the URL hash, so no history fallback is needed."""
+    if not dist or not (Path(dist) / "index.html").is_file():
+        return False
+    application.mount("/", StaticFiles(directory=dist, html=True), name="frontend")
+    return True
+
+
+mount_frontend(app, settings.frontend_dist)
