@@ -25,6 +25,13 @@ INJECTION_PATTERNS = [
     r"(send|transfer|wire|pay ?out|refund)\b.{0,40}\b(to|into)\b.{0,40}(@|account|wallet)",
     r"(override|bypass|disable).{0,20}(mandate|firewall|limit|approval)",
     r"approve (this|immediately|automatically)",
+    # Paraphrases. Tripwires, not a guarantee: seller text never changes a route except to BLOCK it, so a phrasing
+    # that slips past can only auto-settle a purchase that independently passes all four numeric factors.
+    r"\b(disregard|forget|ignore)\b.{0,40}\b(earlier|previous|prior|above|preceding)\b",
+    r"\bpre-?(approved|authori[sz]ed)\b",
+    r"\b(skip|bypass)\b.{0,25}\b(approval|review|checks?|limits?)\b",
+    r"\bwithout\b.{0,12}\b(approval|review)\b",
+    r"\bnew polic(y|ies)\b",
 ]
 _INJ = [re.compile(p, re.I) for p in INJECTION_PATTERNS]
 
