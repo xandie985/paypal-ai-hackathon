@@ -2,7 +2,7 @@
 
 This is the engineering companion to the strategy docs (01–08). It turns the five ideas into **one closed loop** and maps every stage, hand-off guard and demo moment to code and a test that already exist in `backend/`.
 
-> **Status (2026-11-04):** All ten stages are implemented. The full demo arc runs end-to-end in both **replay mode** and **live sandbox mode** (PayPal Orders v2 with vaulting/JS SDK, Channel3 live product graph). `54` tests pass, and each hand-off guard has its own test. The open blockers are listed in [§7 Readiness](#7-readiness-analysis). The phased plan for getting from here to submission is in [10-execution-plan.md](10-execution-plan.md).
+> **Status (2026-11-06):** All ten stages are implemented. The acquisition half (stages 1–4) and the dispute desk (stage 8) run live against the PayPal sandbox; stages 5, 6, 7 and 10 are scripted in replay, with stage 5 delivery proof also recordable live. `101` tests pass. Phase 1 is closed and stage 8 (planned for Phase 3) is done early; Phase 2 (Observe & Learn, AG Studio) is next. Live experiments are logged in §7; the open items are in the Phase close-out below.
 
 ---
 
@@ -345,6 +345,45 @@ A PayPal dispute is answered rationally from records sealed before it existed. A
 - **Timestamps.** The desk lists when each case was opened and its respond-by date. Each case has a timeline in the viewer's time zone: purchase sealed, dispute opened, messages, our responses with the approver, and the outcome.
 - **Replay.** The desk can simulate each reason on any settled item, and PayPal's decision (we win / buyer wins).
 - **Fixed:** the refund-with-return exclusion now says "PayPal doesn't allow a refund-with-return offer on this case" when PayPal leaves it out. The "Item not received" wording now appears only on item-not-received cases, where that option isn't offered at all.
+
+### Experiment 6: live return lifecycle, `PP-R-PSL-10196709` (2026-11-06)
+
+The first dispute taken from open to closed live, through the desk, on order `6AR380350R607771Y` ($28.00, capture `79H28497XC211214U`).
+
+| Step | Who | What happened | PayPal status |
+|---|---|---|---|
+| 1 | Buyer | Opened a $14.00 not-as-described case (partial amount of the $28.00 order) | `WAITING_FOR_SELLER_RESPONSE` |
+| 2 | Agent | Matched the seal, found the 30-day return window still open, so contest was excluded. Contest −$5.62 (67% × 14 − 15), refund on return +$3.20 (0.8 × 14 − 8): recommended refund on return. | — |
+| 3 | Operator | Sent `make-offer` `REFUND_WITH_RETURN` with `return_shipping_address` from `RETURN_ADDRESS_*` | `WAITING_FOR_BUYER_RESPONSE` |
+| 4 | Buyer | Accepted and uploaded `PROOF_OF_RETURN` tracking (UPS `1Z9999999999999999`) | `WAITING_FOR_SELLER_RESPONSE`, `acknowledge_return_item` listed |
+| 5 | Operator | Sent `acknowledge-return-item` `ITEM_RECEIVED` | `UNDER_REVIEW` → `RESOLVED` (`RESOLVED_BUYER_FAVOUR`), $14.00 refunded |
+| 6 | Ledger | Both responses and the outcome sealed; chain verified over 125 entries | — |
+
+**What this proves:** PayPal accepts our `make-offer` (refund with return) and `acknowledge-return-item` bodies. The return path round-trips the buyer's tracking as `evidences[].evidence_type = PROOF_OF_RETURN`, and the outcome syncs into the ledger.
+
+**What review changed afterwards** (commit following `9a50dc3`):
+- **Acknowledging on buyer tracking alone was a flaw.** In step 5 the desk recommended "confirm return received & refund" as soon as the buyer uploaded tracking, and that tracking was a placeholder number. `ITEM_RECEIVED` tells PayPal we inspected the item and releases the refund at once. The acknowledgement is now excluded until a person records what arrived (`POST /api/disputes/{id}/return-received`: item received, damaged, parts missing, empty box/different item, or never arrived). That condition becomes the `acknowledgement_type`. Only `ITEM_RECEIVED` refunds; the others go to PayPal review with our inspection on record. While the parcel is on its way, the desk recommends nothing and says to wait.
+- **A refund we chose is SETTLED, not LOST.** Step 6 recorded `LOST`, which would have cut the auto-approve threshold by 25% as if the agent had lost a fight. Outcomes are now WON, LOST (we contested and lost) or SETTLED (we offered the refund). SETTLED still lowers the supplier's trust score, because a defect return is a quality signal, but it doesn't tighten the mandate. `PP-R-PSL-10196709` was recorded before this change, so its ledger entry still says `LOST`. The ledger is append-only, so that entry stays and this note explains it.
+- **Replay now covers returns** ("Simulate: buyer ships the return"), and `tests/test_dispute_returns.py` has five tests for the lifecycle.
+
+**Corrections to the session report:**
+- "Zero schema violations": two were hit live (`INVALID_OFFER_TYPE`, `MISSING_RETURN_SHIPPING_ADDRESS`) and then fixed.
+- "Cryptographic approval signatures in the ledger": the ledger is SHA-256 hash-chained (tamper-evident). Approvals are HMAC gate tokens held server-side; the ledger records that an approval happened, not a signature.
+- "`UNDER_REVIEW` for 500–1500 ms while settlement pipelines process": observed briefly after two actions. The timing and cause are not documented PayPal behaviour. Only the probe polls past it; the desk shows whatever PayPal reports on each refresh.
+- The return address is from `.env`. Make sure it is a real returns address before any demo where a buyer could ship to it.
+- The desk polls `/api/disputes` every 10 s while the tab is visible, which makes one PayPal call per open case per poll. That's fine for a demo, but raise the interval if many cases are open.
+
+### 🔄 Phase close-out (2026-11-06)
+
+| Item | State |
+|---|---|
+| Phase 1 exit (mandate end to end in the UI; an order approved in the PayPal popup and captured; real order ID shown) | **Done** live, plus the saved-wallet AUTO_SETTLE capture (B-9) |
+| Stage 8 dispute desk (Phase 3 scope, done early) | **Done** live: matching, playbooks for every reason, EV, hard rules, human-sent responses, return lifecycle with inspection, outcome sync (WON / LOST / SETTLED), timestamps and timeline |
+| Live-verified PayPal calls | Orders create/capture, vaulted capture, Payouts (probe), disputes list/get, `make-offer` (`REFUND` and `REFUND_WITH_RETURN`), `acknowledge-return-item`, `accept-claim` (probe) |
+| Not yet verified live | `provide-evidence` (multipart with PDF), `send-message`, the `ITEM_DESCRIPTION` evidence type, webhook signature verification |
+| Still scripted | Stage 6 invoice forensics, stage 7 payout release after verification, stage 10 calibration shown as before/after |
+| Tests | 101 passing, ruff clean, frontend builds |
+| **Next: Phase 2** (doc 10 §4) | Seeded history through the real step functions, `test_studio_row_columns_are_stable`, three custom Studio widgets, the lineage timeline from a grid row, the mandate v1 → v2 diff. The Studio rows already carry `order_id`, `capture_id`, `created_at`, `updated_at`, `dispute_win_odds` and `dispute_outcome`. |
 
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.

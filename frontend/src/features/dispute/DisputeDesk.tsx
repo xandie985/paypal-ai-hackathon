@@ -40,6 +40,7 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
   const [scenario, setScenario] = useState(SCENARIOS[0].reason)
   const [track, setTrack] = useState<Pick<DeliveryInput, 'carrier' | 'tracking_number' | 'tracking_status'>>({ carrier: 'UPS', tracking_number: '', tracking_status: 'DELIVERED' })
   const [loading, setLoading] = useState(false)
+  const [inspect, setInspect] = useState({ condition: 'ITEM_RECEIVED', note: '' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -201,6 +202,35 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
                 <a className="text-xs text-indigo-700 hover:underline" href={api.briefUrl(detail.case.dispute_id)}>Download evidence brief (PDF)</a>
               )}
 
+              {Boolean(f.return_tracking) && !f.return_received && detail.case.actions.includes('acknowledge_return_item') && (
+                <div className="space-y-1 rounded border border-amber-300 bg-amber-50 p-2 text-xs">
+                  <div className="font-semibold text-amber-900">When the parcel arrives, open it and record what was inside. The refund only goes out after this.</div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <select className="rounded border px-1" value={inspect.condition} onChange={(e) => setInspect({ ...inspect, condition: e.target.value })}>
+                      {[['ITEM_RECEIVED', 'Item back, as sold'], ['DAMAGED', 'Damaged'], ['MISSING_ITEMS', 'Parts missing'], ['EMPTY_PACKAGE_OR_DIFFERENT', 'Empty box / different item'], ['ITEM_NOT_RECEIVED', 'Parcel never arrived']].map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                    <input className="min-w-40 flex-1 rounded border px-1" placeholder="what you found (optional)" value={inspect.note} onChange={(e) => setInspect({ ...inspect, note: e.target.value })} />
+                    <button
+                      className="rounded border border-amber-400 bg-white px-2"
+                      disabled={busy}
+                      onClick={() =>
+                        act(async () => {
+                          await api.returnReceived(detail.case.dispute_id, inspect.condition, inspect.note)
+                          setMsg('Inspection sealed in the ledger.')
+                          await open(detail.case.dispute_id)
+                        })
+                      }
+                    >
+                      Record inspection
+                    </button>
+                  </div>
+                </div>
+              )}
+              {Boolean(f.return_received) && (
+                <p className="text-xs text-emerald-800">Return inspected: {String((f.return_received as { condition: string }).condition).replaceAll('_', ' ').toLowerCase()}</p>
+              )}
               {f.lineage_found && !f.delivered && (
                 <div className="flex flex-wrap items-center gap-1 rounded border border-dashed border-slate-300 p-2 text-xs">
                   <span className="text-slate-600">Record tracking (stage 5):</span>
@@ -269,6 +299,11 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
                   Send to PayPal
                 </button>
                 {option !== a.recommended && a.recommended && <span className="text-xs text-amber-700">You're overriding the recommendation. That's recorded.</span>}
+                {!live && detail.case.status === 'WAITING_FOR_BUYER_RESPONSE' && (
+                  <button className="rounded border border-slate-300 px-1 text-[11px]" disabled={busy} onClick={() => act(async () => { await api.simulateReturn(detail.case.dispute_id); await load(); await open(detail.case.dispute_id) })}>
+                    Simulate: buyer ships the return
+                  </button>
+                )}
                 {!live && detail.case.status !== 'RESOLVED' && (
                   <span className="ml-auto flex gap-1 text-[11px] text-slate-500">
                     Simulate PayPal's decision:

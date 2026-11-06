@@ -238,7 +238,14 @@ def _case(dispute_id: str):
     ledger, lineage = s08_defend.locate(case, evidence_ledgers())
     if ledger and lineage:
         s08_defend.sync_outcome(ledger, case, lineage)  # a resolved case teaches stage 10, once
-    return case, ledger, lineage, s08_defend.assess(case, ledger, lineage, date.today(), return_address_set=bool(settings.return_address))
+    receipt = _return_receipt(ledger or fallback_ledger(), lineage or f"DISPUTE-{case.dispute_id}", case.dispute_id)
+    a = s08_defend.assess(case, ledger, lineage, date.today(), return_address_set=bool(settings.return_address), return_receipt=receipt)
+    return case, ledger, lineage, a
+
+
+def _return_receipt(ledger: EvidenceLedger, lineage: str, dispute_id: str) -> dict | None:
+    e = next((e for e in reversed(ledger.entries(lineage, "return_received")) if e.payload["dispute_id"] == dispute_id), None)
+    return {**e.payload, "at": e.created_at} if e else None
 
 
 def _dec(obj):
@@ -406,3 +413,44 @@ def record_delivery(body: DeliveryBody):
     report = _guarded(lambda: DeliveryReport(**body.model_dump(exclude={"lineage_id"})))
     out = s05_verify.verify_delivery(ledger, settings.gate_secret, body.lineage_id, seal.payload["order_id"], report)
     return {"verdict": out["verdict"], "problems": out["problems"]}
+
+
+class ReturnReceived(BaseModel):
+    condition: str = "ITEM_RECEIVED"  # what was in the parcel: see s08_defend.RETURN_CONDITIONS
+    note: str = ""
+    inspector: str = "ops@acme.example"
+
+
+@router.post("/disputes/{dispute_id}/return-received")
+def return_received(dispute_id: str, body: ReturnReceived):
+    """A person opened the returned parcel. Sealed before any acknowledgement goes to PayPal, because
+    ITEM_RECEIVED releases the refund at once and buyer-uploaded tracking proves nothing about contents."""
+    if body.condition not in s08_defend.RETURN_CONDITIONS:
+        raise HTTPException(422, f"condition must be one of {sorted(s08_defend.RETURN_CONDITIONS)}")
+    case, ledger, lineage, _ = _case(dispute_id)
+    if "acknowledge_return_item" not in case.actions:
+        raise HTTPException(409, "PayPal isn't expecting a return on this case")
+    led, lid = ledger or fallback_ledger(), lineage or f"DISPUTE-{dispute_id}"
+    if _return_receipt(led, lid, dispute_id):
+        raise HTTPException(409, "return already inspected for this dispute")
+    led.append(lid, "8-defend", "return_received", {"dispute_id": dispute_id, **body.model_dump()})
+    case2, _, _, a = _case(dispute_id)
+    return _dec({"case": _case_json(case2), "assessment": a})
+
+
+class SimulateReturn(BaseModel):
+    carrier: str = "UPS"
+    tracking_number: str = "1Z999AA10123456784"
+
+
+@router.post("/disputes/{dispute_id}/simulate-return")
+def simulate_return(dispute_id: str, body: SimulateReturn):
+    """Replay only: the buyer accepts our return offer and uploads return tracking, as in the live sandbox."""
+    if not settings.replay_mode:
+        raise HTTPException(409, "live mode: the buyer ships the return in the Resolution Center")
+    try:
+        disputes_gateway().buyer_ships_return(dispute_id, body.carrier, body.tracking_number)
+    except PayPalAPIError as e:
+        raise HTTPException(409, e.to_dict()) from e
+    case, _, _, a = _case(dispute_id)
+    return _dec({"case": _case_json(case), "assessment": a})

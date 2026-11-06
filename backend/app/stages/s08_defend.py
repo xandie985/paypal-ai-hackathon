@@ -181,7 +181,12 @@ OUTCOME_LABEL = {
     "REFUNDED": "LOST",
 }
 
-REFUND_OPTIONS = {"refund_with_return", "partial_refund", "accept"}
+REFUND_OPTIONS = {"refund_with_return", "partial_refund", "accept", "acknowledge_return"}
+
+# What we found when the returned parcel was opened -> PayPal acknowledgement_type. Only ITEM_RECEIVED
+# releases the refund; the others hand the case to PayPal with our inspection on record.
+RETURN_CONDITIONS = {"ITEM_RECEIVED", "DAMAGED", "EMPTY_PACKAGE_OR_DIFFERENT", "MISSING_ITEMS", "ITEM_NOT_RECEIVED"}
+RETURN_PROBLEM_ODDS = Decimal("0.5")  # estimate: PayPal sides with us on a documented bad return
 
 
 @dataclass(frozen=True)
@@ -386,7 +391,13 @@ def _via(case: DisputeCase, prefs: list[str]) -> str:
 
 
 def assess(
-    case: DisputeCase, ledger: EvidenceLedger | None, lineage_id: str | None, today: date, *, return_address_set: bool = True
+    case: DisputeCase,
+    ledger: EvidenceLedger | None,
+    lineage_id: str | None,
+    today: date,
+    *,
+    return_address_set: bool = True,
+    return_receipt: dict | None = None,
 ) -> dict:
     """Deterministic: facts from the sealed record, the reason's playbook, expected value per option,
     hard policy rules, and only the channels PayPal currently allows. The LLM never decides."""
@@ -502,15 +513,29 @@ def assess(
                 "basis": f"refund {A}, item back worth ~{rec:.0%} ({facts['claim']}), minus {RETURN_SHIPPING} return label",
             }
         )
+    if return_receipt:
+        facts["return_received"] = return_receipt
     if "acknowledge_return_item" in case.actions:
+        # Never on the buyer's word: ITEM_RECEIVED makes PayPal refund at once, so it needs our own
+        # inspection of the parcel on record (POST /api/disputes/{id}/return-received).
+        cond = (return_receipt or {}).get("condition")
+        good = cond == "ITEM_RECEIVED"
         options.append(
             {
                 "option": "acknowledge_return",
                 "via": "acknowledge_return_item",
-                "ev": q(rec * A),
-                "basis": f"confirm returned item received, refund {A} and close dispute",
+                "ev": q(rec * A) if good or not cond else q(RETURN_PROBLEM_ODDS * A),
+                "basis": (
+                    f"item back worth ~{rec:.0%}; PayPal refunds {A} and closes the case"
+                    if good or not cond
+                    else f"report it {cond.replace('_', ' ').lower()}: PayPal reviews, ~{RETURN_PROBLEM_ODDS:.0%} it sides with us"
+                ),
+                "condition": cond,
             }
         )
+        if not cond:
+            excl["acknowledge_return"] = "Record what arrived first: buyer tracking isn't proof the item came back."
+
     options.append(
         {
             "option": "accept",
@@ -543,8 +568,22 @@ def assess(
 
     # ---- recommendation: only when PayPal is waiting on us and a playbook applies ----
     state_note = None if case.status == "WAITING_FOR_SELLER_RESPONSE" else STATE_NOTE.get(case.status, f"Status {case.status}.")
+    if not state_note and "acknowledge_return_item" in case.actions and not return_receipt:
+        t = facts.get("return_tracking") or {}
+        state_note = (
+            f"The buyer says the return is on its way ({t.get('carrier', 'no carrier')} {t.get('number', 'no tracking')}). "
+            "Wait for the parcel, inspect it, then record what arrived."
+        )
     if case.status == "RESOLVED" and case.outcome:
-        state_note = f"Resolved: {case.outcome.replace('_', ' ').lower()} ({OUTCOME_LABEL.get(case.outcome, 'unlabelled')})."
+        recorded = next(
+            (
+                e.payload["outcome"]
+                for e in (ledger.entries(lineage_id, "dispute_outcome") if found else [])
+                if e.payload["dispute_id"] == case.dispute_id
+            ),
+            None,
+        )
+        state_note = f"Resolved: {case.outcome.replace('_', ' ').lower()} ({recorded or OUTCOME_LABEL.get(case.outcome, 'unlabelled')})."
     eligible = [o for o in options if o["available"] and not o["excluded_by"]]
     best = max(eligible, key=lambda o: (o["ev"], options.index(o))) if eligible else None
     recommended = best["option"] if best and not state_note and book else None
@@ -591,6 +630,13 @@ def draft_reply(case: DisputeCase, assessment: dict, option: str) -> str:
         return (
             f"Hello, you're right, and we're sorry. {sealed}: the agreed price was {f.get('sealed_amount')} {case.currency}, "
             f"and we charged {f.get('captured_amount')}. We're refunding the {opt.get('amount')} difference."
+        )
+    if option == "acknowledge_return" and (f.get("return_received") or {}).get("condition") not in (None, "ITEM_RECEIVED"):
+        r = f["return_received"]
+        return (
+            f"Hello. The return for order {f.get('order_id', '')} arrived {r['condition'].replace('_', ' ').lower()}"
+            + (f": {r['note']}" if r.get("note") else "")
+            + ". We've documented it and are asking PayPal to review before any refund."
         )
     if option == "acknowledge_return":
         t_str = f" via {f['return_tracking']['carrier']} ({f['return_tracking']['number']})" if f.get("return_tracking") else ""
@@ -685,7 +731,7 @@ def respond(
         resp = gateway.dispute_action(
             case.dispute_id,
             "acknowledge_return_item",
-            {"acknowledgement_type": "ITEM_RECEIVED", "note": note[:2000]},
+            {"acknowledgement_type": chosen.get("condition") or "ITEM_RECEIVED", "note": note[:2000]},
         )
     else:
         resp = gateway.dispute_action(case.dispute_id, "accept_claim", {"note": note[:2000]})
@@ -713,12 +759,17 @@ def respond(
 
 
 def sync_outcome(ledger: EvidenceLedger, case: DisputeCase, lineage_id: str) -> str | None:
-    """When PayPal resolves a case, label it WON/LOST once so stage 10 can learn from it."""
+    """When PayPal resolves a case, label it WON / LOST / SETTLED once so stage 10 can learn from it."""
     label = OUTCOME_LABEL.get(case.outcome or "")
     if case.status != "RESOLVED" or not label:
         return None
     if any(e.payload["dispute_id"] == case.dispute_id for e in ledger.entries(lineage_id, "dispute_outcome")):
         return label
+    ours = [e for e in ledger.entries(lineage_id, "dispute_response") if e.payload["dispute_id"] == case.dispute_id]
+    if label == "LOST" and ours and ours[-1].payload.get("option") in REFUND_OPTIONS:
+        # We chose to refund: a settlement, not a fight we lost. It still counts against the supplier's
+        # trust (stage 10), but doesn't tighten the mandate the way a lost contest does.
+        label = "SETTLED"
     seal = ledger.latest(lineage_id, "seal")
     record_outcome(ledger, case.as_dispute(lineage_id), label, seal.payload.get("seller_id", "") if seal else "")
     return label
@@ -744,13 +795,19 @@ def timeline(case: DisputeCase, assessment: dict) -> list[dict]:
             num = track.get("tracking_number", "")
             t_str = f": {carrier} {num}" if carrier else ""
             out.append({"at": ev.get("date") or case.updated, "who": "buyer", "what": f"Buyer shared return tracking{t_str}"})
+    if f.get("return_received"):
+        rr = f["return_received"]
+        out.append(
+            {"at": rr["at"], "who": "us", "what": f"Return inspected: {rr['condition'].replace('_', ' ').lower()} ({rr['inspector']})"}
+        )
     for r in f.get("responses", []):
         out.append(
             {"at": r["at"], "who": "us", "what": f"Sent {r['option'].replace('_', ' ')} via {r['via'].replace('_', ' ')} ({r['approver']})"}
         )
-    if case.updated and case.status == "RESOLVED":
-        out.append({"at": case.updated, "who": "paypal", "what": assessment["state_note"] or "Resolved"})
     out.sort(key=lambda e: _as_utc(e["at"]))
+    if case.updated and case.status == "RESOLVED":
+        # Always last: PayPal can stamp the resolution a moment before our own response entry is sealed.
+        out.append({"at": case.updated, "who": "paypal", "what": assessment["state_note"] or "Resolved"})
     if case.due_date and case.status == "WAITING_FOR_SELLER_RESPONSE":
         out.append({"at": case.due_date, "who": "deadline", "what": f"Respond by ({assessment['days_left']} days left)"})
     return out

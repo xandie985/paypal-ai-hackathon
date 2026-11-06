@@ -65,4 +65,5 @@ def kpis(rows: list[dict]) -> dict:
         "total_savings": str(sum((Decimal(r["savings"]) for r in rows if r.get("savings") and r.get("route") != "BLOCKED"), Decimal("0"))),
         "disputes_won": sum(r.get("dispute_outcome") == "WON" for r in rows),
         "disputes_lost": sum(r.get("dispute_outcome") == "LOST" for r in rows),
+        "disputes_settled": sum(r.get("dispute_outcome") == "SETTLED" for r in rows),
     }

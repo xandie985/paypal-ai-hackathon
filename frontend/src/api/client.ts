@@ -153,7 +153,7 @@ export type DisputeCase = {
   outcome: string | null
 }
 export type DisputeOption = {
-  option: 'contest' | 'inform' | 'partial_refund' | 'refund_with_return' | 'accept'
+  option: 'contest' | 'inform' | 'partial_refund' | 'refund_with_return' | 'acknowledge_return' | 'accept'
   via: string
   amount?: string
   ev: string
@@ -242,6 +242,9 @@ export const api = {
   simulateDispute: (runId: string, lineage_id: string, reason: string, note: string) =>
     call<{ dispute_id: string }>('POST', `${base(runId)}/disputes/simulate`, { lineage_id, reason, note }),
   simulateResolve: (id: string, outcome_code: string) => call<unknown>('POST', `/disputes/${id}/simulate-resolve`, { outcome_code }),
+  returnReceived: (id: string, condition: string, note: string) =>
+    call<unknown>('POST', `/disputes/${id}/return-received`, { condition, note }),
+  simulateReturn: (id: string) => call<unknown>('POST', `/disputes/${id}/simulate-return`, {}),
   recordDelivery: (d: DeliveryInput) => call<{ verdict: string; problems: string[] }>('POST', '/deliveries', d),
   briefUrl: (id: string) => `/api/disputes/${id}/brief.pdf`,
 }

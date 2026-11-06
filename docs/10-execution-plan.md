@@ -10,6 +10,8 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **As of:** Saturday 2026-10-31. **Deadline:** Thursday 2026-11-12, 12:00 PM PST. That leaves **12 days**, and we plan to submit on **Nov 11**.
 
+> **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
+
 ---
 
 ## 1. Current state
@@ -268,6 +270,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 
 **Exit:** in the UI, a mandate runs end to end. One order is approved through the PayPal popup and captured in the sandbox, and its real order ID is shown. Replay still passes `make test`.
 
+> ✅ **Met (2026-11-05/06).** Also done: saved-wallet capture for AUTO_SETTLE (B-9 passed).
+
 ---
 
 ### Phase 2: Observe & Learn (Thu Nov 5 – Sat Nov 7). Cluster B, ~20%.
@@ -363,6 +367,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 | Payouts returns 403 (B-2) | Stage 7 runs in replay |
 
 **Exit:** `provide-evidence` accepted on the real sandbox dispute, or the fallback has been recorded. The webhook endpoint verifies a real sandbox event. The payout is blocked and then released on screen.
+
+> 🟡 **Partly done early (2026-11-06).** The dispute desk runs live (offers, return acknowledgement, outcome sync). Still open: a live `provide-evidence` submission, the webhook endpoint against a real sandbox event, and the on-screen payout block/release.
 
 ---
 

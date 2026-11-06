@@ -175,6 +175,30 @@ class ReplayPayPal:
     def list_disputes(self):
         return [{k: d[k] for k in ("dispute_id", "reason", "status", "dispute_amount", "create_time")} for d in self.disputes.values()]
 
+    def buyer_ships_return(self, dispute_id, carrier, tracking_number):
+        """Replay only: the buyer accepts a refund-with-return offer and uploads return tracking."""
+        d = self.get_dispute(dispute_id)
+        if (d.get("offer") or {}).get("offer_type") != "REFUND_WITH_RETURN":
+            raise PayPalAPIError(422, "UNPROCESSABLE_ENTITY", "no refund-with-return offer to accept")
+        now = _now()
+        d["evidences"] = [
+            {
+                "evidence_type": "PROOF_OF_RETURN",
+                "source": "SUBMITTED_BY_BUYER",
+                "date": now,
+                "evidence_info": {"tracking_info": [{"carrier_name": carrier, "tracking_number": tracking_number}]},
+            }
+        ]
+        d.update(
+            status="WAITING_FOR_SELLER_RESPONSE",
+            update_time=now,
+            links=[
+                {"rel": r, "method": "POST", "href": f"/v1/customer/disputes/{dispute_id}/{r.replace('_', '-')}"}
+                for r in ("acknowledge_return_item", "send_message")
+            ],
+        )
+        return d
+
     def resolve_dispute(self, dispute_id, outcome_code):
         """Replay only: what PayPal does when it closes a case."""
         d = self.get_dispute(dispute_id)
@@ -204,9 +228,11 @@ class ReplayPayPal:
                 )
             d["status"], d["offer"] = "WAITING_FOR_BUYER_RESPONSE", body
             d["links"] = [link for link in d["links"] if link["rel"] == "send_message"]
-        elif action in ("accept_claim", "acknowledge_return_item"):
+        elif action == "accept_claim" or (action == "acknowledge_return_item" and body.get("acknowledgement_type") == "ITEM_RECEIVED"):
             d["status"], d["links"] = "RESOLVED", []
             d["dispute_outcome"] = {"outcome_code": "RESOLVED_BUYER_FAVOUR"}
+        elif action == "acknowledge_return_item":  # damaged / empty / missing: PayPal reviews before refunding
+            d["status"], d["links"] = "UNDER_REVIEW", []
         return {"links": [{"rel": "self", "href": f"/v1/customer/disputes/{dispute_id}"}]}
 
     def verify_webhook(self, headers, body):
