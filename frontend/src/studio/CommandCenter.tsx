@@ -13,6 +13,7 @@ import { AgStudio, AgStudioProvider } from 'ag-studio-react'
 import { api, type StudioRow } from '../api/client'
 import { MandateDiff } from '../features/learn/MandateDiff'
 import { LineageDrawer } from '../features/lineage/LineageDrawer'
+import { buildAi } from './ai'
 import { pactguardTheme } from './theme'
 
 if (import.meta.env.DEV) enableStudioDevValidations()
@@ -171,14 +172,21 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [mode, setMode] = useState<AgStudioMode>('view')
   const [lineage, setLineage] = useState<string | null>(null)
   const [diff, setDiff] = useState(false)
+  // Studio reads `ai` once, when it is created, so the assistant is decided before it mounts:
+  // undefined = still asking the server, null = no key configured (the assistant stays hidden).
+  const [aiModel, setAiModel] = useState<string | null | undefined>(undefined)
   const load = useCallback(() => {
     api.studioRows(runId, true).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
   }, [runId])
   useEffect(load, [load])
+  useEffect(() => {
+    api.aiConfig().then((c) => setAiModel(c.configured ? c.model : null)).catch(() => setAiModel(null))
+  }, [])
   const data = useMemo(() => (rows ? toSources(rows) : null), [rows])
+  const ai = useMemo(() => (aiModel ? buildAi(aiModel) : undefined), [aiModel])
 
   if (error) return <p className="m-6 rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">Studio data failed: {error}</p>
-  if (!data || !rows) return <p className="m-6 text-sm text-slate-500">Loading Studio data…</p>
+  if (!data || !rows || aiModel === undefined) return <p className="m-6 text-sm text-slate-500">Loading Studio data…</p>
   if (rows.length === 0)
     return (
       <div className="m-6 space-y-2 text-sm">
@@ -219,8 +227,8 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
         </div>
       </div>
       <div className="relative min-h-0 flex-1" onClick={onGridClick}>
-        <AgStudioProvider licenseKey={licenseKey} modules={modules}>
-          <AgStudio style={{ height: '100%', width: '100%' }} theme={pactguardTheme} data={data} initialState={report} mode={mode} />
+        <AgStudioProvider licenseKey={licenseKey} modules={ai ? modules : undefined}>
+          <AgStudio style={{ height: '100%', width: '100%' }} theme={pactguardTheme} data={data} initialState={report} mode={mode} ai={ai} />
         </AgStudioProvider>
         {lineage && <LineageDrawer key={lineage} lineage={lineage} onClose={() => setLineage(null)} />}
         {diff && <MandateDiff runId={runId} onClose={() => setDiff(false)} />}

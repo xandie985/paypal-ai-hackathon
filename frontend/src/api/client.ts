@@ -242,6 +242,7 @@ export const api = {
   studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
   studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
   runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),
+  aiConfig: () => call<{ configured: boolean; model: string }>('GET', '/ai/config'),
   demoRun: () => call<unknown>('POST', '/demo/run'),
   disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
   dispute: (id: string) => call<DisputeDetail>('GET', `/disputes/${id}`),
