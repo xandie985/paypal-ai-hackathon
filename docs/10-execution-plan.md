@@ -6,7 +6,11 @@ This document turns the research (docs 01–08) and the implementation framework
 2. **How we solve it.** Each problem is mapped to a mechanism, a module and a phase. The problems are grouped into clusters, and each cluster gets effort in proportion to its weight.
 3. **Phase technicalities.** For each phase: the endpoints, files, sandbox steps, tests, risks and exit criteria.
 
+The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md). It covers the design system, the screens, AG Studio details and a UI task tracker that runs alongside these phases.
+
 > **As of:** Saturday 2026-10-31. **Deadline:** Thursday 2026-11-12, 12:00 PM PST. That leaves **12 days**, and we plan to submit on **Nov 11**.
+
+> **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
 ---
 
@@ -160,17 +164,17 @@ make test
 ```
 Expect 29 passing. If the number differs, fix it before Phase 1. Every later phase depends on these guards.
 
-**Accounts and blockers.** These are doc 09's B-1 to B-8, plus one new item.
-| ID | Action | How to verify it worked |
-|---|---|---|
-| B-1 | Create a sandbox REST app. Put `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` in `.env`. Create sandbox **business** (us) and **personal** (buyer) accounts. | `POST /v1/oauth2/token` returns a token |
-| B-2 | Check that Payouts is enabled on the sandbox business account | A $1 `POST /v1/payments/payouts` returns 201, not 403 |
-| B-4 | **Open a sandbox dispute now.** Buy something as the sandbox buyer, then open a dispute in the sandbox Resolution Center. | `GET /v1/customer/disputes` lists it. Note when it reaches `WAITING_FOR_SELLER_RESPONSE`. |
-| B-5 | Redeem `PAYPAL-HACKATHON-2026`. Read the Channel3 docs: path, auth header, response fields, whether return policy is exposed. | One real search returns products |
-| B-6 | Start the AG Studio trial. Record the licence key and exact package names. | A hello-world grid renders |
-| B-7 | Render and APIMatic accounts | Logged in. Context Plugin installed in the editor. |
-| B-8 | `ANTHROPIC_API_KEY` (optional) | `make_llm` returns a client |
-| **B-9 (new)** | **Can AUTO_SETTLE capture without a buyer popup?** A server-created order needs buyer approval before capture. An "auto" purchase is only truly autonomous if the buyer has saved a PayPal wallet that we can charge later (vaulting). Check whether the sandbox app supports saving a PayPal wallet. | A test order against a saved wallet captures without a popup. If it doesn't, use the fallback in §5. |
+**Accounts and blockers.** These are doc 09's B-1 to B-8, plus B-9.
+| ID | Action | How to verify it worked | Status |
+|---|---|---|---|
+| B-1 | Create a sandbox REST app. Put `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` in `.env`. Create sandbox **business** (us) and **personal** (buyer) accounts. | `POST /v1/oauth2/token` returns a token | **Done (PASS)** |
+| B-2 | Check that Payouts is enabled on the sandbox business account | A $1 `POST /v1/payments/payouts` returns 201, not 403 | **Done (PASS, batch UYPJ27MNP6X5J)** |
+| B-4 | Open a sandbox dispute. Buy something as sandbox buyer, then open a dispute in the sandbox Resolution Center. | `GET /v1/customer/disputes` lists it. Note when it reaches `WAITING_FOR_SELLER_RESPONSE`. | **Blocked on PayPal UI bug; Fallback R3 active (`PP-D-1001`)** |
+| B-5 | Redeem `PAYPAL-HACKATHON-2026`. Read the Channel3 docs: path, auth header, response fields, whether return policy is exposed. | One real search returns products | **Done (PASS, `/v1/search` + return table)** |
+| B-6 | **Done 2026-11-01.** AG Studio Pro with AI trial licence in `frontend/.env.local` (`VITE_AG_STUDIO_LICENSE`). Packages `ag-studio` and `ag-studio-react`, both 3.0.0. | `#/studio` renders run rows with the watermark hidden and no licence warning | **Done (PASS, closed 2026-11-01)** |
+| B-7 | Render and APIMatic accounts | Logged in. Context Plugin installed in the editor. | Open |
+| B-8 | `ANTHROPIC_API_KEY` (optional) | `make_llm` returns a client | Optional (skipped in preflight) |
+| **B-9 (new)** | **Can AUTO_SETTLE capture without a buyer popup?** A server-created order needs buyer approval before capture. An "auto" purchase is only truly autonomous if the buyer has saved a PayPal wallet that we can charge later (vaulting). Check whether the sandbox app supports saving a PayPal wallet. | A test order against a saved wallet captures without a popup. If it doesn't, use the fallback in §5. | **Done (PASS, vault id `8ng18757…`, order `7LX28344P4713330H` captured)** |
 
 **Decisions to record in doc 09 §7.** Each comes with a recommendation.
 | ID | Question | Recommendation |
@@ -179,6 +183,7 @@ Expect 29 passing. If the number differs, fix it before Phase 1. Every later pha
 | D-2 | How do funds flow in stage 7? | Escrow-style: the platform collects first and releases after verification. The pitch says so explicitly, and notes that production would use PayPal multiparty. |
 | D-3 | What is the default mandate mode? | `auto` with a $300 threshold. `review_first` is shown as a toggle. |
 | D-4 | Should dispute evidence auto-submit? This is doc 03's open assumption. | Default to "draft, then 1-click submit". Auto-submit is a mandate toggle. |
+| D-5 | How is geographic delivery and cross-border fulfillment governed? | 3-layer protection: mandate vendor allowlisting by country/jurisdiction (e.g. EU vs US), firewall routing to human review on unverified or hidden shipping terms, and carrier tracking verification in Stage 5 before escrow payout disbursement. |
 
 **Source check.** Open every arXiv ID in doc 02 and every GitHub, HN, Reddit and SO link in doc 03. Remove or correct anything that doesn't resolve. Only verified sources go into the video.
 
@@ -233,6 +238,8 @@ Expect 29 passing. If the number differs, fix it before Phase 1. Every later pha
 - **The negotiating sellers are simulated** supplier agents (`SellerAgent`). Channel3 supplies the real retail baseline they're measured against. We say this on screen.
 
 #### 1d. Frontend
+> UI design and the remaining Phase 1 UI tasks (UI-0 foundation, UI-1 Mission Control) are in [doc 11 §11](11-dashboard-ui-plan.md#11-phase-by-phase-ui-plan-alongside-doc-10).
+
 Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We use v6 if the sandbox app supports it, otherwise `@paypal/react-paypal-js`.
 
 | Component (`frontend/src/…`) | Shows | Backed by |
@@ -263,6 +270,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 
 **Exit:** in the UI, a mandate runs end to end. One order is approved through the PayPal popup and captured in the sandbox, and its real order ID is shown. Replay still passes `make test`.
 
+> ✅ **Met (2026-11-05/06).** Also done: saved-wallet capture for AUTO_SETTLE (B-9 passed).
+
 ---
 
 ### Phase 2: Observe & Learn (Thu Nov 5 – Sat Nov 7). Cluster B, ~20%.
@@ -278,6 +287,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 - New `GET /api/runs/{id}/calibration` returns `calibrate()`'s `before`, `after`, `changes` and `trust`.
 
 #### 2b. UI
+> Full detail is in [doc 11](11-dashboard-ui-plan.md): data contract §8, custom widgets §9, agent layer §10, tasks UI-2.x.
+
 | Piece | Detail |
 |---|---|
 | Grid | AG Grid / AG Studio over `/api/studio/rows`. Route column colour-coded. Row click opens the lineage timeline. |
@@ -293,6 +304,13 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 **Risks:** if trial or package problems block AG Studio, fall back to an AG Grid Enterprise trial grid with our own widgets. That loses the natural-language beat but keeps the grid and lineage story.
 
 **Exit:** on screen, a Studio prompt builds a widget from run data and seeded history. Clicking a row opens its lineage timeline. The mandate diff is visible.
+
+> 🟡 **In progress (2026-11-06).**
+> - **Done:** 2a seeded history and 2c tests.
+>   - `app/seed.py` runs 30 synthetic mandates through the real `runs.step_*` functions in replay. That gives about 60 purchases over 28 days, covering firewall decisions, approvals and rejections, captures, delivery proof, disputes answered by the desk's own recommendation, and stage 10 calibration. The history ledger's hash chain verifies.
+>   - `GET /api/studio/rows?history=true` merges it with the current run, each row tagged `source: run | seeded`. `GET /api/studio/history/verify` checks the chain. Run `backend/scripts/seed_history.py` for a summary.
+>   - Tests: `test_studio_row_columns_are_stable` freezes `s09_observe.ROW_COLUMNS` and checks the frontend's Studio field ids against it, and `test_seeded_history_comes_from_the_real_code_path` (`tests/test_studio_contract.py`, 6 tests).
+> - **Next:** the three custom widgets, the lineage timeline from a grid row, `GET /api/runs/{id}/calibration` and the mandate diff.
 
 ---
 
@@ -312,15 +330,27 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
   - `PAYMENT.PAYOUTSBATCH.*`: payout status.
 - Register the Render URL (Phase 4), or a local tunnel for now, as the sandbox webhook. That gives the `PAYPAL_WEBHOOK_ID`.
 
-#### 3b. Defend (pain points #3, #4, #5)
-- **Dispute → lineage lookup.** A dispute's disputed transaction carries the seller's transaction (capture) ID. Ledger `capture` entries store `capture_id`. Add a lookup from capture ID to lineage. Check the exact field name on the real sandbox dispute from B-4.
-- **Endpoints:**
-  - `GET /api/disputes` returns the triage queue (`s08_defend.triage`).
-  - `GET /api/disputes/{id}/evidence` returns the bundle and a PDF preview.
-  - `POST /api/disputes/{id}/submit` calls `s08_defend.submit`. The default is a human click (D-4).
-- **`INVALID_EVIDENCE_FILE` (SO #78902643).** Test the multipart shape early against the real dispute: the `input` JSON part, `file1` as `application/pdf`, size limits. `provide-evidence` is only accepted in certain dispute states, so watch the B-4 dispute's status.
-- **Optional LLM narrative.** `llm.text` drafts the `notes` field from ledger records only. The deterministic template stays as the fallback. The 2,000-character cap is already enforced.
-- **UI `features/disputes/DisputeCard.tsx`:** reason, deadline, win odds, the sealed terms hash, delivery verdict, "chain verified", missing records, and a Submit button.
+#### 3b. Defend (pain points #3, #4, #5) — COMPLETED & VERIFIED (2026-11-05)
+- **Dispute → Lineage Lookup:** Matched primarily via `disputed_transactions[].custom` (the Orders v2 lineage thread), falling back to `seller_transaction_id` (`capture_id`) in the sealed ledger.
+- **8 Deterministic Reason Playbooks (`s08_defend.PLAYBOOKS`):**
+  1. *Item Not Received:* Contests if Stage 5 tracking proves delivery (≥85% win odds, +$23 EV); shares tracking if in transit; refunds if unverified. Never demands return of undelivered goods.
+  2. *Not As Described:* Enforces sealed return window; defect claims cap odds at 35% and recommend `refund_with_return` with `return_shipping_address` attached.
+  3. *Duplicate Charge:* Scans mandate ledger within 48h; refunds duplicates or contests single capture via deterministic `PayPal-Request-Id`.
+  4. *Incorrect Amount:* Refunds overcharge difference only or contests exact penny-exact match.
+  5. *Refund Not Processed:* Honours prior sealed refund commitments.
+  6. *Unauthorised:* Flags security review; contests only with both delivery proof and human approval.
+  7. *Recurring / Other Means:* Single capture contests; multiple captures surrender.
+  8. *Unknown:* Routes to manual review.
+- **Stage-Aware Fee Modeling:** Handling cost scales with risk: **$15** (Inquiry) → **$20** (Chargeback) → **$25** (Arbitration).
+- **Carrier Tracking Endpoint (`POST /api/deliveries`):** Seals live carrier tracking (`carrier`, `tracking_number`, `status: DELIVERED`) into `ledger.db` for live sandbox orders, enabling `PROOF_OF_FULFILLMENT`.
+- **Outcome Sync to Stage 10:** PayPal claim verdicts (`dispute_outcome`) are recorded as `WON` / `LOST`, updating supplier reliability scores.
+- **Endpoints & UI:**
+  - `GET /api/disputes` returns active dispute queue with local-time timeline.
+  - `GET /api/disputes/{id}` returns assessment, drafts, and facts.
+  - `GET /api/disputes/{id}/brief.pdf` generates cryptographic legal PDF evidence brief via ReportLab.
+  - `POST /api/disputes/{id}/respond` sends `provide-evidence`, `make-offer`, `send-message`, or `accept-claim` with human confirmation (D-4).
+  - `POST /api/deliveries` records live carrier tracking proofs.
+  - UI `DisputeDesk.tsx` in Mission Control shows timeline, EV cards, draft editor with optional Claude polish, and 1-click submit.
 
 #### 3c. Pay out (pain point #7)
 - If B-2 passed, `release_payout` runs against sandbox Payouts. `sender_batch_id` is lineage-derived, and PayPal rejects a reused one, which adds a second layer of idempotency.
@@ -344,6 +374,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 | Payouts returns 403 (B-2) | Stage 7 runs in replay |
 
 **Exit:** `provide-evidence` accepted on the real sandbox dispute, or the fallback has been recorded. The webhook endpoint verifies a real sandbox event. The payout is blocked and then released on screen.
+
+> 🟡 **Partly done early (2026-11-06).** The dispute desk runs live (offers, return acknowledgement, outcome sync). Still open: a live `provide-evidence` submission, the webhook endpoint against a real sandbox event, and the on-screen payout block/release.
 
 ---
 
@@ -375,12 +407,16 @@ The output is a Markdown table pasted into the README. These numbers back up the
 #### 4d. README
 Rewrite for judges: what it is, a live URL, a 3-step local run, architecture, a sponsor-usage section per tool, the evaluation table, and what's simulated vs live.
 
+#### 4e. UI polish sweep
+No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in doc 11 §13.
+
 **Exit:** the public URL runs the arc. The evaluation table is in the README. **Feature freeze Tuesday Nov 10 at 18:00.**
 
 ---
 
 ### Phase 5: Video & submit (Tue Nov 10 – Wed Nov 11)
 
+- **Present mode:** doc 11 UI-5.1 (hotkeys, larger type, Studio in view mode).
 - **Script:** start from doc 08's 3-minute script, re-timed to the real screens. Keep the beats: hook (Issue #95) → discovery and negotiation → firewall (auto / approve / attack) → dispute defended from the seal → AG Studio → close.
 - **Recording:** record in **replay mode** so every take is identical. Cut in one clip of the real sandbox order ID and the real dispute response as proof of live integration.
 - **Devpost:** description, sponsor tools used (each matching the README), repo link, video link. Check the rules for repo visibility (the repo is private now) and video length before uploading.
@@ -403,7 +439,16 @@ Rewrite for judges: what it is, a live URL, a 3-step local run, architecture, a 
 
 ---
 
-## 6. What we are not building
+## 6. Backlog: carried forward
+
+Open items from later phases, kept here so they aren't lost while Phase 2 runs. Pick them up in Phase 3 or 4.
+
+- [ ] **Live `provide-evidence` submission.** Multipart, with the PDF brief, on a real sandbox dispute. Only the replay double has received it so far.
+- [ ] **Webhook signature verification against a real sandbox event.** `SandboxPayPal.verify_webhook` exists but has never checked a real PayPal event. It still takes a parsed dict rather than the raw body (pain point #11).
+- [ ] **On-screen payout block and release.** Stage 7 payout without the VERIFIED and RECONCILED gate tokens is refused, then released. It's proven in tests and the demo arc, but not shown in the UI.
+- [ ] **Stages 6, 7 and 10 are still scripted.** Invoice forensics, payout release and calibration run in replay and seeded history, not on live sandbox objects.
+
+## 7. What we are not building
 
 | Cut | Why |
 |---|---|
@@ -416,7 +461,7 @@ Rewrite for judges: what it is, a live URL, a 3-step local run, architecture, a 
 
 ---
 
-## 7. Team split (3 people)
+## 8. Team split (3 people)
 
 | Person | Phase 0 | Phase 1 | Phase 2 | Phase 3 | Phases 4–5 |
 |---|---|---|---|---|---|

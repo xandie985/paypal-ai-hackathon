@@ -1,0 +1,36 @@
+{
+  "products": [
+    {
+      "id": "prod_webcam_1",
+      "title": "Logitech C920 HD Pro Webcam",
+      "brands": [{"name": "Logitech"}],
+      "image_url": "https://img.example/c920.jpg",
+      "offers": [
+        {"domain": "www.amazon.com", "url": "https://www.amazon.com/dp/B006JH8T3S", "price": {"price": 59.99, "currency": "USD"}},
+        {"domain": "bestbuy.com", "url": "https://www.bestbuy.com/site/c920", "price": {"price": 64.99, "currency": "USD"}}
+      ]
+    },
+    {
+      "id": "prod_webcam_2",
+      "title": "Generic 1080p Webcam",
+      "brands": [{"name": "NoName Tech"}],
+      "images": [{"url": "https://img.example/generic.jpg"}],
+      "offers": [{"domain": "ebay.com", "url": "https://www.ebay.com/itm/1", "price": {"price": "$1,024.50", "currency": "USD"}}]
+    },
+    {
+      "id": "prod_webcam_3",
+      "title": "Brand-only listing",
+      "brands": [{"name": "Razer"}],
+      "price": "79.00",
+      "offers": []
+    },
+    {
+      "id": "prod_webcam_4",
+      "title": "Unknown shop webcam",
+      "offers": [{"domain": "https://shop.unknown-merchant.example/path", "price": {"price": "45.10"}}]
+    },
+    {"id": "prod_no_price", "title": "Price on request", "offers": [{"domain": "target.com", "price": {"price": null}}]},
+    {"id": "prod_zero", "title": "Placeholder", "offers": [{"domain": "walmart.com", "price": {"price": 0}}]},
+    {"id": "prod_scalar_price", "title": "Scalar offer price", "offers": [{"domain": "newegg.com", "price": "129.95"}]}
+  ]
+}

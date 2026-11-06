@@ -9,10 +9,10 @@ from decimal import Decimal
 
 from .config import Settings
 from .core.errors import GuardViolation
-from .core.ledger import EvidenceLedger
+from .core.ledger import EvidenceLedger, open_ledger
 from .core.lineage import txn_lineage
 from .domain.models import DeliveryReport, Dispute, Mandate, Need, Proposal, VendorInvoice
-from .integrations.channel3 import ProductSource, make_product_source
+from .integrations.channel3 import LIVE_DEMO_MERCHANTS, ProductSource, make_product_source
 from .integrations.paypal import PayPalGateway, make_gateway
 from .stages import (
     s01_delegate,
@@ -40,7 +40,7 @@ class Runtime:
 
     @classmethod
     def build(cls, settings: Settings, ledger_path: str | None = None) -> "Runtime":
-        return cls(settings, EvidenceLedger(ledger_path or settings.ledger_path), make_gateway(settings), make_product_source(settings))
+        return cls(settings, open_ledger(ledger_path or settings.ledger_path), make_gateway(settings), make_product_source(settings))
 
     def log(self, stage: str, event: str, **data) -> None:
         self.timeline.append({"stage": stage, "event": event, **data})
@@ -55,9 +55,9 @@ DEMO_MANDATE = Mandate(
     budget=Decimal("2200"),
     auto_threshold=Decimal("300"),
     per_txn_cap=Decimal("1500"),
-    vendor_allowlist=["Northwind Displays", "Contoso Retail"],
+    vendor_allowlist=["Northwind Displays", "Contoso Retail", *LIVE_DEMO_MERCHANTS],
     allowed_categories=["monitors", "webcams", "microphones"],
-    min_return_days=30,
+    min_return_days=14,
 )
 
 VENDOR_REGISTRY = {"Northwind Displays": "payouts@northwind.example", "Contoso Retail": "ar@contoso.example"}

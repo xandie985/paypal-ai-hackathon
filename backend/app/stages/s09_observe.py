@@ -6,14 +6,44 @@ from decimal import Decimal
 
 from ..core.ledger import EvidenceLedger
 
+# The row contract Studio widgets bind to. Renaming or dropping a key breaks saved dashboards, so
+# tests/test_studio_contract.py freezes this list and checks the frontend's field ids against it.
+ROW_COLUMNS = (
+    "lineage_id",
+    "source",
+    "created_at",
+    "updated_at",
+    "vendor",
+    "category",
+    "action",
+    "route",
+    "amount",
+    "savings",
+    "firewall_ms",
+    "blocked_reasons",
+    "approved_by",
+    "order_id",
+    "capture_id",
+    "status",
+    "delivery",
+    "invoice_status",
+    "payout_net",
+    "dispute_win_odds",
+    "dispute_outcome",
+)
 
-def transaction_rows(ledger: EvidenceLedger) -> list[dict]:
+
+def transaction_rows(ledger: EvidenceLedger, lineage_prefix: str | None = None) -> list[dict]:
+    """`lineage_prefix` = a run's mandate lineage: live runs share one ledger file."""
     by_lid: dict[str, dict] = defaultdict(dict)
-    for e in ledger.entries():
+    for e in ledger.entries(lineage_prefix):
         if "." not in e.lineage_id:
             continue
         r = by_lid[e.lineage_id]
         r["lineage_id"] = e.lineage_id
+        # Ledger timestamps are UTC ISO-8601 and sealed into the hash chain, so they can't be edited later.
+        r.setdefault("created_at", e.created_at)
+        r["updated_at"] = e.created_at
         p = e.payload
         if e.kind == "decision":
             prop = p["proposal"]
@@ -31,8 +61,14 @@ def transaction_rows(ledger: EvidenceLedger) -> list[dict]:
                 r["savings"] = str((Decimal(base) - Decimal(prop["unit_price"])) * prop["quantity"])
         elif e.kind == "approval":
             r["approved_by"] = p["approver"]
+        elif e.kind == "rejection":
+            r["status"] = "REJECTED"
+        elif e.kind == "seal":
+            r["order_id"] = p.get("order_id", "")
         elif e.kind == "capture":
             r["status"] = "CAPTURED"
+            r["order_id"] = p.get("order_id") or r.get("order_id", "")
+            r["capture_id"] = p.get("capture_id", "")
         elif e.kind == "delivery_proof":
             r["delivery"] = p["verdict"]
         elif e.kind == "reconciliation":
@@ -43,7 +79,8 @@ def transaction_rows(ledger: EvidenceLedger) -> list[dict]:
             r["dispute_win_odds"] = p["win_odds"]
         elif e.kind == "dispute_outcome":
             r["dispute_outcome"] = p["outcome"]
-    return list(by_lid.values())
+    # Newest purchase first, so the table grows from the top.
+    return sorted(by_lid.values(), key=lambda r: r["created_at"], reverse=True)
 
 
 def kpis(rows: list[dict]) -> dict:
@@ -56,4 +93,5 @@ def kpis(rows: list[dict]) -> dict:
         "total_savings": str(sum((Decimal(r["savings"]) for r in rows if r.get("savings") and r.get("route") != "BLOCKED"), Decimal("0"))),
         "disputes_won": sum(r.get("dispute_outcome") == "WON" for r in rows),
         "disputes_lost": sum(r.get("dispute_outcome") == "LOST" for r in rows),
+        "disputes_settled": sum(r.get("dispute_outcome") == "SETTLED" for r in rows),
     }

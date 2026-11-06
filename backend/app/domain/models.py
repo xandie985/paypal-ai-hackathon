@@ -48,6 +48,7 @@ class ProductCandidate(BaseModel):
     currency: str = "USD"
     return_days: int | None = None  # None = merchant hides return terms (blocker B2a)
     url: str = ""
+    image_url: str = ""
     source: str = "replay"
 
 
@@ -129,6 +130,6 @@ class VendorInvoice(BaseModel):
 class Dispute(BaseModel):
     dispute_id: str
     lineage_id: str
-    reason: Literal["MERCHANDISE_OR_SERVICE_NOT_RECEIVED", "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED", "UNAUTHORISED"]
+    reason: str  # PayPal's reason code; live disputes use more codes than the three REQUIRED maps
     amount: Decimal
     seller_response_due_date: str

@@ -48,7 +48,7 @@ def release_payout(
             {
                 "recipient_type": "EMAIL",
                 "receiver": payee_email,
-                "amount": {"currency_code": currency, "value": format(split["net"], "f")},
+                "amount": {"currency": currency, "currency_code": currency, "value": format(split["net"], "f")},
                 "note": f"Lineage {lineage_id}",
                 "sender_item_id": invoice_number[:63],
             }

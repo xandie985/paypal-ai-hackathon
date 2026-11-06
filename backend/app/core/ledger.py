@@ -51,7 +51,10 @@ def _entry_hash(seq, lineage_id, stage, kind, payload_hash, prev_hash, created_a
 
 
 class EvidenceLedger:
-    def __init__(self, path: str = ":memory:"):
+    def __init__(self, path: str = ":memory:", clock=None):
+        """`clock` returns an aware datetime for each entry. Only seeded history passes one, to spread
+        synthetic runs over past days; the timestamp is inside the hash chain either way."""
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._conn.executescript(_SCHEMA)
         self._lock = threading.Lock()
@@ -62,7 +65,7 @@ class EvidenceLedger:
         with self._lock:
             row = self._conn.execute("SELECT seq, entry_hash FROM entries ORDER BY seq DESC LIMIT 1").fetchone()
             seq, prev_hash = (row[0] + 1, row[1]) if row else (1, GENESIS)
-            created_at = datetime.now(timezone.utc).isoformat()
+            created_at = self._clock().isoformat()
             entry_hash = _entry_hash(seq, lineage_id, stage, kind, payload_hash, prev_hash, created_at)
             self._conn.execute(
                 "INSERT INTO entries VALUES (?,?,?,?,?,?,?,?,?)",
@@ -104,3 +107,18 @@ class EvidenceLedger:
         import json
 
         return LedgerEntry(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5], r[6], r[7], r[8])
+
+
+_SHARED: dict[str, EvidenceLedger] = {}
+_SHARED_LOCK = threading.Lock()
+
+
+def open_ledger(path: str) -> EvidenceLedger:
+    """One ledger object per file per process. Live runs all append to the same file, and one
+    object (one lock) keeps their seq/prev_hash chain from racing. ':memory:' is always private."""
+    if path == ":memory:":
+        return EvidenceLedger(path)
+    with _SHARED_LOCK:
+        if path not in _SHARED:
+            _SHARED[path] = EvidenceLedger(path)
+        return _SHARED[path]

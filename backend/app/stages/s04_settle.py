@@ -34,6 +34,7 @@ def prepare_order(
     approval_token: str | None = None,
     buyer_ip: str = "0.0.0.0",
     currency: str = "USD",
+    payment_source: dict | None = None,
 ) -> dict:
     lid = decision.lineage_id
     if decision.route == "BLOCKED":
@@ -45,10 +46,8 @@ def prepare_order(
             raise NotAuthorized("human approval required", lineage_id=lid) from e
 
     pu = build_purchase_unit([LineItem(title, offer.sku, offer.unit_price, offer.quantity, tax_rate)], currency, lid, description=title)
-    order = gateway.create_order(pu, request_id(lid, "s4", "create_order", decision.decision_digest))
-
-    seal = {
-        "order_id": order["id"],
+    vaulted = bool(payment_source)
+    terms = {
         "decision_digest": decision.decision_digest,
         "seller_id": offer.seller_id,
         "sku": offer.sku,
@@ -61,20 +60,41 @@ def prepare_order(
         "terms_hash": sha256_hex(offer.terms),
         "terms_text": offer.terms,
         "buyer_ip": buyer_ip,
+        # Which way the buyer paid, never the vault token itself: the seal is shown in the UI and is permanent.
+        "payment_source": "saved_wallet" if vaulted else "buyer_approval",
     }
+    if vaulted:
+        # A saved-wallet order is captured by PayPal at creation, so money moves inside create_order.
+        # Seal the terms first: if this write fails, nothing is charged.
+        try:
+            ledger.append(
+                lid, STAGE, "seal_intent", {**terms, "request_id": request_id(lid, "s4", "create_order", decision.decision_digest)}
+            )
+        except Exception as e:
+            raise SealWriteFailed("seal write failed; saved wallet not charged", lineage_id=lid) from e
+    order = gateway.create_order(pu, request_id(lid, "s4", "create_order", decision.decision_digest), payment_source=payment_source)
+    seal = {"order_id": order["id"], **terms}
     try:
         ledger.append(lid, STAGE, "seal", seal)
     except Exception as e:
-        raise SealWriteFailed("seal write failed; order left uncaptured", order_id=order["id"]) from e
+        msg = (
+            "seal write failed after a saved-wallet charge; the seal_intent entry holds the terms"
+            if vaulted
+            else "seal write failed; order left uncaptured"
+        )
+        raise SealWriteFailed(msg, order_id=order["id"]) from e
     return {"order": order, "purchase_unit": pu, "seal": seal}
 
 
-def capture(ledger: EvidenceLedger, gateway: PayPalGateway, lineage_id: str, order_id: str) -> dict:
+def capture(ledger: EvidenceLedger, gateway: PayPalGateway, lineage_id: str, order_id: str, order_payload: dict | None = None) -> dict:
     seals = [e for e in ledger.entries(lineage_id, "seal") if e.payload["order_id"] == order_id]
     if not seals:
         raise SealMissing("no seal for order; refusing to capture", order_id=order_id)
-    resp = gateway.capture_order(order_id, request_id(lineage_id, "s4", "capture", order_id))
-    caps = [c for pu in resp.get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
+    # Check if order was already captured at creation time (vaulted payment source)
+    caps = [c for pu in (order_payload or {}).get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
+    if not (caps and caps[0].get("status") == "COMPLETED"):
+        resp = gateway.capture_order(order_id, request_id(lineage_id, "s4", "capture", order_id))
+        caps = [c for pu in resp.get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
     # Guard against false 'captured': order status COMPLETED doesn't mean the money moved.
     if not caps or caps[0]["status"] != "COMPLETED":
         status = caps[0]["status"] if caps else "NO_CAPTURE"

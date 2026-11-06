@@ -56,3 +56,11 @@ class InvoiceFlagged(GuardViolation):
 
 class WebhookUnverified(GuardViolation):
     code, handoff = "WEBHOOK_UNVERIFIED", "7->8"
+
+
+class DisputeAlreadyAnswered(GuardViolation):
+    code, handoff = "DISPUTE_ALREADY_ANSWERED", "8"
+
+
+class DisputeActionUnavailable(GuardViolation):
+    code, handoff = "DISPUTE_ACTION_UNAVAILABLE", "8"

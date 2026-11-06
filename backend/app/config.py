@@ -2,12 +2,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file="../.env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
     paypal_webhook_id: str = ""
+    paypal_vault_id: str = ""
     channel3_api_key: str = ""
     channel3_base_url: str = "https://api.trychannel3.com"
     anthropic_api_key: str = ""
@@ -16,6 +17,36 @@ class Settings(BaseSettings):
     gate_secret: str = "dev-only-gate-secret-change-me"
     # Deterministic replay of PayPal/Channel3/LLM so the demo never depends on sandbox uptime.
     replay_mode: bool = True
+
+    # Where a buyer ships a returned item (make-offer REFUND_WITH_RETURN). PayPal shows it to the buyer,
+    # so it must be your real returns address in live mode.
+    return_address_line_1: str = ""
+    return_address_city: str = ""
+    return_address_state: str = ""
+    return_address_postal_code: str = ""
+    return_address_country: str = "US"
+
+    @property
+    def return_address(self) -> dict | None:
+        """PayPal address object, or None when unset in live mode (a refund-on-return offer is then refused).
+        Replay uses an obviously fictional address so rehearsals work without configuration."""
+        if self.return_address_line_1 and self.return_address_city and self.return_address_postal_code:
+            return {
+                "address_line_1": self.return_address_line_1,
+                "admin_area_2": self.return_address_city,
+                "admin_area_1": self.return_address_state,
+                "postal_code": self.return_address_postal_code,
+                "country_code": self.return_address_country,
+            }
+        if self.replay_mode:
+            return {
+                "address_line_1": "1 Replay Returns Dock (demo)",
+                "admin_area_2": "Nowhere",
+                "admin_area_1": "CA",
+                "postal_code": "00000",
+                "country_code": "US",
+            }
+        return None
 
     @property
     def paypal_live(self) -> bool:
