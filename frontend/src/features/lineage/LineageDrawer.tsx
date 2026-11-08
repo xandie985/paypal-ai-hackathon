@@ -13,7 +13,15 @@ const KIND_TONE: Record<string, string> = {
 
 // Mount with key={lineage}: a new purchase starts from empty state instead of resetting it in an effect.
 // One purchase's sealed entries, oldest first. Each row shows the previous row's hash it commits to.
-export function LineageDrawer({ lineage, onClose }: { lineage: string; onClose: () => void }) {
+export function LineageDrawer({
+  lineage,
+  onClose,
+  onOpenPaypalTxn,
+}: {
+  lineage: string
+  onClose: () => void
+  onOpenPaypalTxn?: (captureId: string) => void
+}) {
   const [view, setView] = useState<LineageView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
@@ -25,6 +33,8 @@ export function LineageDrawer({ lineage, onClose }: { lineage: string; onClose: 
     }
   }, [lineage])
 
+  const captureId = view?.entries.find((e) => e.kind === 'capture')?.payload?.capture_id as string | undefined
+
   return (
     <aside className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl" aria-label="Lineage timeline">
       <header className="flex items-start justify-between border-b border-slate-200 p-4">
@@ -32,11 +42,19 @@ export function LineageDrawer({ lineage, onClose }: { lineage: string; onClose: 
           <h2 className="font-semibold">Lineage timeline</h2>
           <p className="break-all font-mono text-xs text-slate-500">{lineage}</p>
           {view && (
-            <div className="mt-1 flex gap-2 text-xs">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
               <span className={`rounded-full px-2 py-0.5 font-medium ${view.chain_ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                 {view.chain_ok ? 'chain verified' : `broken at #${view.first_bad_seq}`}
               </span>
               <span className="rounded-full bg-slate-100 px-2 py-0.5">{view.source === 'seeded' ? 'seeded history' : 'this run'}</span>
+              {captureId && onOpenPaypalTxn && (
+                <button
+                  onClick={() => onOpenPaypalTxn(captureId)}
+                  className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  PayPal capture {captureId} →
+                </button>
+              )}
             </div>
           )}
         </div>

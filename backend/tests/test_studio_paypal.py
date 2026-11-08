@@ -130,3 +130,18 @@ def test_non_retryable_errors_surface():
     with pytest.raises(PayPalAPIError) as e:
         studio_paypal.paypal_tables(sandbox(MockAccount(fail_first_with=403)))
     assert e.value.status == 403
+
+
+def test_fixture_transactions_join_seeded_capture_ids():
+    """Replay fixture Transaction Search rows include real capture IDs from seeded history so the
+    Purchases -> PayPal Transactions join resolves."""
+    from app.seed import build_history
+    from app.stages.s09_observe import transaction_rows
+
+    t = studio_paypal.paypal_tables()
+    paypal_ids = {r["id"] for r in t["transactions"]}
+    captures = {r["capture_id"] for r in transaction_rows(build_history()) if r.get("capture_id")}
+    matched = paypal_ids & captures
+    assert {"CAP-000064", "CAP-000062", "CAP-000060"} <= matched
+    cap64 = next(r for r in t["transactions"] if r["id"] == "CAP-000064")
+    assert cap64["eventType"] == "Purchase capture" and cap64["amount"] == -118.0

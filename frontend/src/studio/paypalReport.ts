@@ -19,9 +19,26 @@ import type { PaypalTables } from '../api/client'
 const CALENDAR_ID = 'calendar'
 const TXN = 'paypalTransactions'
 
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const dayFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' })
+const whenFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+const pctFmt = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 0 })
+
+const formatOptionsFor = (format: AgFormat) => {
+  if (format === 'currencyFormat') return { format: usd }
+  if (format === 'dateFormat') return { format: dayFmt }
+  if (format === 'dateTimeFormat') return { format: whenFmt }
+  if (format === 'percentageFormat') return { format: pctFmt }
+  return undefined
+}
+
 // [id, name, format, hide?]
 type FieldSpec = [id: string, name: string, format: AgFormat, hide?: boolean]
-const fields = (specs: FieldSpec[]): AgFieldDefinition[] => specs.map(([id, name, format, hide]) => ({ id, name, format, ...(hide && { hide }) }))
+const fields = (specs: FieldSpec[]): AgFieldDefinition[] =>
+  specs.map(([id, name, format, hide]) => {
+    const formatOptions = formatOptionsFor(format)
+    return { id, name, format, ...(formatOptions && { formatOptions }), ...(hide && { hide }) }
+  })
 
 // Foreign key 'table.field' -> primary key 'table.field'.
 const manyToOne = (id: string, source: string, target: string): AgRelationDefinition => {
@@ -46,6 +63,7 @@ const ratio = (id: string, name: string, description: string, numerator: string,
   name,
   description,
   format: 'percentageFormat',
+  formatOptions: { format: pctFmt },
   isMeasure: true,
   expression: { operator: 'divide', inputs: [sum(numerator), sum(denominator)] },
 })
@@ -220,6 +238,7 @@ export function paypalSources(data: PaypalTables): Required<Pick<AgDataSourcesDe
       manyToOne('item-invoice', 'invoiceItems.invoiceId', 'invoices.id'),
       manyToOne('payment-invoice', 'invoicePayments.invoiceId', 'invoices.id'),
       manyToOne('plan-product', 'plans.productId', 'products.id'),
+      manyToOne('purchase-paypal-transaction', 'transactions.capture_id', `${TXN}.id`),
       onCalendar('invoices', 'invoiceDate'),
       onCalendar('invoicePayments', 'date'),
       onCalendar(TXN, 'date', 'day'),
@@ -263,6 +282,11 @@ const kpi = (text: string, value: { id: string; aggregation?: 'sum' | 'avg' | 'c
 const revenue: AgPageState = {
   id: 'revenue',
   widgets: {
+    currency: {
+      type: 'button-filter',
+      dataMapping: { value: [{ id: 'invoices.currency' }] },
+      format: { ...title('Currency'), style: { selection: { type: 'single' }, dimensions: { height: 28, minWidth: 48 } } },
+    },
     'invoice-date': {
       type: 'date-filter',
       dataMapping: { value: [{ id: 'invoices.invoiceDate' }] },
@@ -313,10 +337,13 @@ const revenue: AgPageState = {
       type: 'pivot-grid',
       dataMapping: {
         rows: [{ id: 'customers.company' }, { id: 'invoices.number' }],
-        columns: [{ id: 'invoices.status' }],
+        columns: [{ id: 'invoices.statusGroup' }],
         values: [sum('invoices.total')],
       },
-      format: { style: { totalColumns: true, totalColumnsPlacement: 'before', grandTotalRow: { enabled: true } } },
+      format: {
+        ...title('Invoices by customer and status (click any invoice row for details)'),
+        style: { totalColumns: true, totalColumnsPlacement: 'before', grandTotalRow: { enabled: true } },
+      },
     },
   },
   widgetLayout: {
@@ -324,13 +351,17 @@ const revenue: AgPageState = {
     'kpi-collected': at(4, 0, 4, 7),
     'kpi-outstanding': at(8, 0, 4, 7),
     'kpi-overdue': at(12, 0, 4, 7),
-    'invoice-date': at(16, 0, 8, 7),
+    currency: at(16, 0, 4, 7),
+    'invoice-date': at(20, 0, 4, 7),
     'billed-vs-collected': at(0, 7, 16, 16),
     'collection-rate': at(16, 7, 8, 16),
     'status-sunburst': at(0, 23, 8, 18),
     'items-treemap': at(8, 23, 8, 18),
     'payment-methods': at(16, 23, 8, 18),
-    'invoice-status-pivot': at(0, 41, 24, 20),
+    'invoice-status-pivot': at(0, 41, 24, 22),
+  },
+  filter: {
+    page: [{ field: { id: 'invoices.currency' }, model: { operator: 'isIn', value: ['USD'] }, filterWidgetId: 'currency' }],
   },
 }
 
@@ -422,6 +453,7 @@ const cash: AgPageState = {
       dataMapping: {
         cols: [
           { id: `${TXN}.date` },
+          { id: `${TXN}.id` },
           { id: `${TXN}.eventType` },
           { id: `${TXN}.status` },
           { id: `${TXN}.counterparty` },
@@ -432,7 +464,7 @@ const cash: AgPageState = {
         ],
       },
       sort: [{ field: { id: `${TXN}.date` }, direction: 'desc' }],
-      format: title('PayPal account ledger'),
+      format: title('PayPal account ledger (click a row for transaction & linked purchase details)'),
     },
   },
   widgetLayout: {
@@ -456,7 +488,7 @@ const catalogue: AgPageState = {
     'catalogue-sunburst': {
       type: 'sunburst-chart',
       dataMapping: { categoryKey: [{ id: 'products.type' }, { id: 'products.name' }, { id: 'plans.name' }], valueKey: [sum('plans.monthlyPrice')] },
-      format: title('Catalogue: type, product and plan (sized by monthly price)'),
+      format: title('Catalogue hierarchy (by monthly price)'),
     },
     'price-range': {
       type: 'bar-chart-grouped',
@@ -464,7 +496,7 @@ const catalogue: AgPageState = {
         categoryKey: [{ id: 'products.name' }],
         valueKey: [{ id: 'plans.monthlyPrice', aggregation: 'min' }, avg('plans.monthlyPrice'), { id: 'plans.monthlyPrice', aggregation: 'max' }],
       },
-      format: { ...title('Monthly-normalised price range by product'), style: { theme: { common: { legend: { enabled: true, position: 'right' } } } } },
+      format: { ...title('Monthly price range by product'), style: { theme: { common: { legend: { enabled: true, position: 'bottom' } } } } },
     },
     'plan-intervals': {
       type: 'donut-chart',
@@ -494,10 +526,10 @@ const catalogue: AgPageState = {
     'kpi-plans': at(6, 0, 6, 7),
     'kpi-monthly': at(12, 0, 6, 7),
     'kpi-trial': at(18, 0, 6, 7),
-    'plan-intervals': at(0, 7, 10, 20),
-    'price-range': at(10, 7, 14, 20),
-    plans: at(0, 27, 16, 24),
-    'catalogue-sunburst': at(16, 27, 8, 24),
+    'catalogue-sunburst': at(0, 7, 10, 20),
+    'price-range': at(10, 7, 8, 20),
+    'plan-intervals': at(18, 7, 6, 20),
+    plans: at(0, 27, 24, 22),
   },
 }
 

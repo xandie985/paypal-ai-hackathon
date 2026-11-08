@@ -263,7 +263,12 @@ export const api = {
     if (history) q.set('history', 'true')
     return call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', `/studio/rows${q.size ? `?${q}` : ''}`)
   },
-  studioPaypal: (fixture?: boolean) => call<PaypalTables>('GET', `/studio/paypal${fixture ? '?fixture=true' : ''}`),
+  studioPaypal: (fixture?: boolean, refresh?: boolean) => {
+    const q = new URLSearchParams()
+    if (fixture) q.set('fixture', 'true')
+    if (refresh) q.set('refresh', 'true')
+    return call<PaypalTables>('GET', `/studio/paypal${q.size ? `?${q}` : ''}`)
+  },
   studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
   studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
   runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),

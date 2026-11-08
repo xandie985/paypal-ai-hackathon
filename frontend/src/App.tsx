@@ -28,7 +28,8 @@ function useHash() {
 export default function App() {
   const [mode, setMode] = useState<string>('…')
   const { run, events, error, busy, start, act } = useRunSession()
-  const studio = useHash() === '#/studio'
+  const hash = useHash()
+  const studio = hash === '#/studio' || hash.startsWith('#/studio/')
   useEffect(() => {
     api.health().then((h) => setMode(h.paypal_live ? 'live sandbox' : 'replay')).catch(() => setMode('backend offline'))
   }, [])

@@ -49,9 +49,11 @@ def test_frontend_studio_fields_match_the_contract():
     assert field_ids and field_ids <= set(ROW_COLUMNS), field_ids - set(ROW_COLUMNS)
     assert table_cols <= field_ids, table_cols - field_ids  # the table can only show defined fields
     widget_refs = set(re.findall(r"f\('([a-z_]+)'\)", src)) | set(re.findall(r"only\('([a-z_]+)'", src))
-    assert {"vendor", "route", "dispute_outcome", "supplier_trust", "savings"} <= widget_refs
+    assert {"vendor", "route", "dispute_outcome", "supplier_trust", "savings", "firewall_ms", "dispute_win_odds"} <= widget_refs
+    assert "capture_id" in table_cols
     assert widget_refs <= field_ids, widget_refs - field_ids  # every widget, filter and sort binds a defined field
     assert money <= field_ids
+    assert "id: 'activity'" in src and "Agent Activity" in src
 
 
 def test_seeded_history_comes_from_the_real_code_path():
@@ -109,3 +111,20 @@ def test_supplier_trust_matches_stage_10():
     for vendor, score in supplier_trust(led, None).items():
         assert by_vendor[vendor] == score, vendor
     assert all(0 < t <= 1 for t in by_vendor.values())
+
+
+def test_studio_lineage_resolves_persistent_runtime_ledger_when_runs_cleared():
+    """After a backend restart (RUNS is empty), clicking a row from the persistent ledger must still open its lineage."""
+    from app import api as api_mod
+    from app import runs
+
+    client.post("/api/demo/run")
+    runs.RUNS.clear()
+    rows = client.get("/api/studio/rows").json()["rows"]
+    assert rows and rows[0]["source"] == "demo"
+    lid = rows[0]["lineage_id"]
+    res = client.get(f"/api/studio/lineage/{lid}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["lineage_id"] == lid and body["chain_ok"] is True and body["entries"]
+    assert api_mod.runtime().ledger.entries(lid)

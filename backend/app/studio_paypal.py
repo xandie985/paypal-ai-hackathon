@@ -101,7 +101,7 @@ _UNISSUED = {"DRAFT", "SCHEDULED", "CANCELLED"}  # not sent, or withdrawn: nothi
 _RECEIVABLE = {"SENT", "UNPAID", "PAYMENT_PENDING", "PARTIALLY_PAID"}
 _MONTHS_PER_INTERVAL = {"DAY": 12 / 365, "WEEK": 12 / 52, "MONTH": 1, "YEAR": 12}
 _DAYS_PER_INTERVAL = {"DAY": 1, "WEEK": 7, "MONTH": 365 / 12, "YEAR": 365}
-_EVENT_TYPES = {"T0001": "Payout", "T1105": "Hold released", "T1503": "Payout hold"}
+_EVENT_TYPES = {"T0001": "Payout", "T0006": "Purchase capture", "T1105": "Hold released", "T1503": "Payout hold"}
 _TXN_STATUSES = {"S": "Success", "P": "Pending", "D": "Denied", "V": "Reversed", "F": "Partially refunded"}
 
 
@@ -436,6 +436,23 @@ def _fixture_payout(n: int, day: str, amount: str, fee: str, email: str, campaig
     }
 
 
+def _fixture_capture(txn_id: str, day: str, amount: str, fee: str, email: str, order_id: str, balance: str) -> dict:
+    """A purchase capture in Transaction Search whose transaction_id matches a ledger capture_id."""
+    return {
+        "transaction_info": {
+            "transaction_id": txn_id,
+            "transaction_event_code": "T0006",
+            "transaction_initiation_date": f"{day}T14:20:00+0000",
+            "transaction_amount": _usd(f"-{amount}"),
+            "fee_amount": _usd(f"-{fee}"),
+            "transaction_status": "S",
+            "ending_balance": _usd(balance),
+            "transaction_note": f"Agent purchase capture ({order_id})",
+        },
+        "payer_info": {"email_address": email},
+    }
+
+
 def fixture_account() -> dict:
     """PayPal-shaped responses for a small merchant that sells subscriptions, sends invoices and pays affiliates."""
     acme, globex, initech = (
@@ -577,6 +594,12 @@ def fixture_account() -> dict:
         _fixture_payout(3, "2026-10-19", "200.00", "2.00", "noor@creators.example", "CREATORS", "9592.15"),
         _fixture_payout(4, "2026-10-26", "150.00", "1.50", "omar@creators.example", "CREATORS", "9440.65"),
         _fixture_payout(5, "2026-11-02", "60.00", "0.60", "lena@example.com", "REFUNDS", "9380.05"),
+        _fixture_capture("CAP-000064", "2026-11-04", "118.00", "3.91", "orders@contoso.example", "ORD-REPLAY-000063", "9258.14"),
+        _fixture_capture("CAP-000062", "2026-11-03", "178.00", "5.65", "orders@contoso.example", "ORD-REPLAY-000061", "9074.49"),
+        _fixture_capture("CAP-000060", "2026-11-02", "1323.00", "38.86", "orders@contoso.example", "ORD-REPLAY-000059", "7712.63"),
+        _fixture_capture("79H28497XC211214U", "2026-11-05", "28.00", "1.30", "marketplace@newegg.example", "6AR380350R607771Y", "7683.33"),
+        _fixture_capture("8BR25737S32734541", "2026-11-05", "49.99", "1.94", "billing@adorama.example", "2F389039BY9136942", "7631.40"),
+        _fixture_capture("3MT57171KG6470404", "2026-11-04", "28.00", "1.30", "marketplace@newegg.example", "2JF67397537282144", "7602.10"),
         {
             "transaction_info": {
                 "transaction_id": "TXN-FIXT-0006",
@@ -619,7 +642,7 @@ def paypal_tables(gw=None, now: datetime | None = None) -> dict:
 
 
 @router.get("/studio/paypal")
-def studio_paypal(fixture: bool = False):
+def studio_paypal(fixture: bool = False, refresh: bool = False):
     """Tables behind the Command Center's PayPal overview pages. A plain `def`, so FastAPI runs the blocking
     httpx calls in its thread pool, off the event loop."""
     if fixture:
@@ -627,8 +650,8 @@ def studio_paypal(fixture: bool = False):
     gw = _gateway()
     if not isinstance(gw, SandboxPayPal):
         return paypal_tables(gw)
-    with _cache_lock:  # one live read at a time; reloads within the TTL reuse it
-        hit = _cache.get("live")
+    with _cache_lock:  # one live read at a time; reloads within the TTL reuse it unless refresh=true
+        hit = None if refresh else _cache.get("live")
         if hit and time.monotonic() - hit[0] < CACHE_TTL_S:
             return hit[1]
         try:

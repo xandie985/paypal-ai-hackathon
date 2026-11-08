@@ -89,8 +89,11 @@ def studio_rows(run_id: str | None = None, history: bool = False):
 
 @router.get("/studio/lineage/{lineage_id}")
 def studio_lineage(lineage_id: str):
-    """One purchase's sealed ledger entries, from whichever ledger holds it (runs first, then seeded history)."""
-    candidates = [("run", r.rt.ledger) for r in reversed(list(runs.RUNS.values()))] + [("seeded", history_ledger())]
+    """One purchase's sealed ledger entries, from whichever ledger holds it (runs first, then persistent ledger, then seeded history)."""
+    candidates = [("run", r.rt.ledger) for r in reversed(list(runs.RUNS.values()))] + [
+        ("run", runtime().ledger),
+        ("seeded", history_ledger()),
+    ]
     for source, ledger in candidates:
         entries = ledger.entries(lineage_id)
         if entries:

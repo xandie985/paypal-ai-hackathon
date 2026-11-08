@@ -43,7 +43,6 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
   const [inspect, setInspect] = useState({ condition: 'ITEM_RECEIVED', note: '' })
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
       setList(await api.disputes())
     } catch (e) {
@@ -53,7 +52,10 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
     }
   }, [])
   useEffect(() => {
-    load()
+    api
+      .disputes()
+      .then(setList)
+      .catch((e) => setMsg(`Could not load disputes: ${err(e)}`))
     const timer = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         load()
@@ -132,7 +134,10 @@ export function DisputeDesk({ run, live }: { run: RunSnapshot | null; live: bool
           <button
             className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
             disabled={loading}
-            onClick={load}
+            onClick={() => {
+              setLoading(true)
+              load()
+            }}
           >
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
