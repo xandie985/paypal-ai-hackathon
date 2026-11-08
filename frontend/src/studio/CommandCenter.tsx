@@ -205,6 +205,7 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [paypal, setPaypal] = useState<PaypalTables | null | undefined>(undefined)
   const apiRef = useRef<AgStudioApi | null>(null)
   const [pageId, setPageId] = useState(report.selectedPageId)
+  const [liveReportingNotice, setLiveReportingNotice] = useState<string | null>(null)
   const [paypalError, setPaypalError] = useState<string | null>(null)
   const load = useCallback(() => {
     api.studioRows(runId, true).then((r) => setRows(r.rows)).catch((e) => setError(String(e)))
@@ -213,12 +214,14 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
     api
       .studioPaypal()
       .then(setPaypal)
-      .catch((e) => {
+      .catch(() => {
+        // Live read hit permission check (e.g. Transaction Search not enabled in sandbox app).
+        // Fallback to fixture so Revenue, Receivables, Cash, and Catalogue pages remain fully interactive.
         api
           .studioPaypal(true)
           .then((p) => {
             setPaypal(p)
-            setPaypalError(`Live sandbox reporting unavailable (${String(e)}). Showing fixture data.`)
+            setLiveReportingNotice('sandbox app lacks Transaction Search permission')
           })
           .catch((e2) => {
             setPaypal(null)
@@ -281,8 +284,13 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-1.5">
         <span className="text-xs text-slate-500">
           Click a purchase row to trace its sealed lineage.
-          {paypal && <> PayPal pages: {paypal.source === 'live' ? 'live sandbox account' : 'replay fixture'}.</>}
-          {paypalError && <span className="text-rose-700"> PayPal pages unavailable: {paypalError}</span>}
+          {paypal && (
+            <>
+              {' '}PayPal pages: {paypal.source === 'live' ? 'live sandbox account' : 'replay fixture'}
+              {liveReportingNotice && <span className="text-slate-400"> ({liveReportingNotice})</span>}.
+            </>
+          )}
+          {!paypal && paypalError && <span className="text-rose-700"> PayPal pages unavailable: {paypalError}</span>}
         </span>
         <div className="flex gap-1">
           <button
