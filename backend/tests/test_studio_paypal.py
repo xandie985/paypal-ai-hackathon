@@ -122,7 +122,7 @@ def test_endpoint_live_mode_serves_from_cache_and_maps_paypal_errors(monkeypatch
     studio_paypal._cache.clear()
     monkeypatch.setattr(studio_paypal, "_gateway", lambda: sandbox(MockAccount(fail_first_with=403)))
     r = client.get("/api/studio/paypal")
-    assert r.status_code == 502 and "RATE_LIMIT_REACHED" in r.json()["detail"]
+    assert r.status_code == 403 and "RATE_LIMIT_REACHED" in r.json()["detail"]
     studio_paypal._cache.clear()
 
 

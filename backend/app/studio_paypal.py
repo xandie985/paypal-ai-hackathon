@@ -597,9 +597,6 @@ def fixture_account() -> dict:
         _fixture_capture("CAP-000064", "2026-11-04", "118.00", "3.91", "orders@contoso.example", "ORD-REPLAY-000063", "9258.14"),
         _fixture_capture("CAP-000062", "2026-11-03", "178.00", "5.65", "orders@contoso.example", "ORD-REPLAY-000061", "9074.49"),
         _fixture_capture("CAP-000060", "2026-11-02", "1323.00", "38.86", "orders@contoso.example", "ORD-REPLAY-000059", "7712.63"),
-        _fixture_capture("79H28497XC211214U", "2026-11-05", "28.00", "1.30", "marketplace@newegg.example", "6AR380350R607771Y", "7683.33"),
-        _fixture_capture("8BR25737S32734541", "2026-11-05", "49.99", "1.94", "billing@adorama.example", "2F389039BY9136942", "7631.40"),
-        _fixture_capture("3MT57171KG6470404", "2026-11-04", "28.00", "1.30", "marketplace@newegg.example", "2JF67397537282144", "7602.10"),
         {
             "transaction_info": {
                 "transaction_id": "TXN-FIXT-0006",
@@ -657,6 +654,7 @@ def studio_paypal(fixture: bool = False, refresh: bool = False):
         try:
             tables = paypal_tables(gw)
         except PayPalAPIError as e:
-            raise HTTPException(502, f"PayPal sandbox read failed: {e}") from e
+            # 401/403 means the app lacks a permission (e.g. Transaction Search); anything else is an upstream failure.
+            raise HTTPException(403 if e.status in (401, 403) else 502, f"PayPal sandbox read failed: {e}") from e
         _cache["live"] = (time.monotonic(), tables)
         return tables

@@ -11,7 +11,7 @@ import {
   type AgStudioMode,
 } from 'ag-studio'
 import { AgStudio, AgStudioProvider } from 'ag-studio-react'
-import { api, type PaypalTables, type StudioRow } from '../api/client'
+import { api, ApiError, type PaypalTables, type StudioRow } from '../api/client'
 import { MandateDiff } from '../features/learn/MandateDiff'
 import { LineageDrawer } from '../features/lineage/LineageDrawer'
 import { buildAi } from './ai'
@@ -311,15 +311,20 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
         setPaypal(p)
         setLiveReportingNotice(null)
       })
-      .catch(() => {
-        // Live read hit permission check (e.g. Transaction Search not enabled in sandbox app).
-        // Fallback to fixture so Revenue, Receivables, Cash, and Catalogue pages remain fully interactive.
-        api
+      .catch((e) => {
+        // Only a permission failure (403, e.g. Transaction Search not enabled on the sandbox app) falls back to the fixture.
+        // Anything else is shown as an error with Retry, so a real outage is never passed off as replay data.
+        if (!(e instanceof ApiError && e.status === 403)) {
+          setPaypal(null)
+          setPaypalError(String(e))
+          return
+        }
+        return api
           .studioPaypal(true)
           .then((p) => {
             setPaypalError(null)
             setPaypal(p)
-            setLiveReportingNotice('sandbox lacks Transaction Search permission')
+            setLiveReportingNotice('sandbox app lacks permission for the live read')
           })
           .catch((e2) => {
             setPaypal(null)
