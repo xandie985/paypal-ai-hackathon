@@ -101,7 +101,19 @@ _UNISSUED = {"DRAFT", "SCHEDULED", "CANCELLED"}  # not sent, or withdrawn: nothi
 _RECEIVABLE = {"SENT", "UNPAID", "PAYMENT_PENDING", "PARTIALLY_PAID"}
 _MONTHS_PER_INTERVAL = {"DAY": 12 / 365, "WEEK": 12 / 52, "MONTH": 1, "YEAR": 12}
 _DAYS_PER_INTERVAL = {"DAY": 1, "WEEK": 7, "MONTH": 365 / 12, "YEAR": 365}
-_EVENT_TYPES = {"T0001": "Payout", "T0006": "Purchase capture", "T1105": "Hold released", "T1503": "Payout hold"}
+_EVENT_TYPES = {
+    "T0000": "Payment",
+    "T0001": "Payout",
+    "T0006": "Purchase capture",
+    "T0007": "Website payment",
+    "T0013": "Donation",
+    "T0400": "Bank withdrawal",
+    "T0700": "Currency conversion",
+    "T1105": "Hold released",
+    "T1107": "Payment refund",
+    "T1201": "Chargeback",
+    "T1503": "Payout hold",
+}
 _TXN_STATUSES = {"S": "Success", "P": "Pending", "D": "Denied", "V": "Reversed", "F": "Partially refunded"}
 
 
@@ -293,7 +305,7 @@ def _transaction_rows(transactions: list[dict]) -> list[dict]:
                 "net": _round2(amt + fee),
                 "endingBalance": _amount(t["ending_balance"]) if t.get("ending_balance") else None,
                 "counterparty": payer.get("email_address"),
-                "note": t.get("transaction_note"),
+                "note": t.get("transaction_note") or t.get("transaction_subject"),
             }
         )
     return rows
@@ -436,7 +448,9 @@ def _fixture_payout(n: int, day: str, amount: str, fee: str, email: str, campaig
     }
 
 
-def _fixture_capture(txn_id: str, day: str, amount: str, fee: str, email: str, order_id: str, balance: str) -> dict:
+def _fixture_capture(
+    txn_id: str, day: str, amount: str, fee: str, email: str, order_id: str, balance: str, note: str | None = None
+) -> dict:
     """A purchase capture in Transaction Search whose transaction_id matches a ledger capture_id."""
     return {
         "transaction_info": {
@@ -447,7 +461,7 @@ def _fixture_capture(txn_id: str, day: str, amount: str, fee: str, email: str, o
             "fee_amount": _usd(f"-{fee}"),
             "transaction_status": "S",
             "ending_balance": _usd(balance),
-            "transaction_note": f"Agent purchase capture ({order_id})",
+            "transaction_note": note or f"Agent purchase capture ({order_id})",
         },
         "payer_info": {"email_address": email},
     }
@@ -597,6 +611,10 @@ def fixture_account() -> dict:
         _fixture_capture("CAP-000064", "2026-11-04", "118.00", "3.91", "orders@contoso.example", "ORD-REPLAY-000063", "9258.14"),
         _fixture_capture("CAP-000062", "2026-11-03", "178.00", "5.65", "orders@contoso.example", "ORD-REPLAY-000061", "9074.49"),
         _fixture_capture("CAP-000060", "2026-11-02", "1323.00", "38.86", "orders@contoso.example", "ORD-REPLAY-000059", "7712.63"),
+        # A purchase capture no agent decision stands behind: the reconciliation page shows it as "Not decided by agent".
+        _fixture_capture(
+            "TXN-FIXT-0007", "2026-11-04", "74.00", "2.50", "ads@promo.example", "", "7635.13", note="Card purchase outside the agent"
+        ),
         {
             "transaction_info": {
                 "transaction_id": "TXN-FIXT-0006",

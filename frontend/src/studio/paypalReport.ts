@@ -34,7 +34,7 @@ const formatOptionsFor = (format: AgFormat) => {
 
 // [id, name, format, hide?]
 type FieldSpec = [id: string, name: string, format: AgFormat, hide?: boolean]
-const fields = (specs: FieldSpec[]): AgFieldDefinition[] =>
+export const fields = (specs: FieldSpec[]): AgFieldDefinition[] =>
   specs.map(([id, name, format, hide]) => {
     const formatOptions = formatOptionsFor(format)
     return { id, name, format, ...(formatOptions && { formatOptions }), ...(hide && { hide }) }
@@ -54,9 +54,9 @@ const onCalendar = (tableId: string, fieldId: string, truncate?: 'day'): AgRelat
   ...(truncate && { truncate }),
 })
 
-const sum = (id: string) => ({ id, aggregation: 'sum' as const })
+export const sum = (id: string) => ({ id, aggregation: 'sum' as const })
 const avg = (id: string) => ({ id, aggregation: 'avg' as const })
-const countd = (id: string) => ({ id, aggregation: 'countd' as const })
+export const countd = (id: string) => ({ id, aggregation: 'countd' as const })
 
 const ratio = (id: string, name: string, description: string, numerator: string, denominator: string): AgExpressionFieldDefinition => ({
   id,
@@ -263,13 +263,13 @@ export function paypalSources(data: PaypalTables): Required<Pick<AgDataSourcesDe
 // --- Pages --------------------------------------------------------------------------------------
 
 // Position on the canvas grid, in tracks: 24 columns wide.
-const at = (xTrack: number, yTrack: number, xSpan: number, ySpan: number): AgWidgetLayoutState => ({ xTrack, yTrack, xSpan, ySpan })
-const title = (text: string) => ({ title: { enabled: true, text } })
+export const at = (xTrack: number, yTrack: number, xSpan: number, ySpan: number): AgWidgetLayoutState => ({ xTrack, yTrack, xSpan, ySpan })
+export const title = (text: string) => ({ title: { enabled: true, text } })
 const FONT = 'Inter, ui-sans-serif, system-ui, sans-serif'
 const typography = (fontSize: number, fontWeight: 'normal' | 'bold' = 'normal') => ({ fontFamily: FONT, fontSize, fontWeight, fontStyle: 'normal' as const })
 
 // A KPI tile: bold title, large value, optional sparkline along `sparklineX`.
-const kpi = (text: string, value: { id: string; aggregation?: 'sum' | 'avg' | 'countd' }, sparklineX?: string) => ({
+export const kpi = (text: string, value: { id: string; aggregation?: 'sum' | 'avg' | 'countd' }, sparklineX?: string) => ({
   type: 'value' as const,
   dataMapping: { value: [value], ...(sparklineX && { sparklineX: [{ id: sparklineX }] }) },
   format: {

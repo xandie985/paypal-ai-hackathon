@@ -11,12 +11,13 @@ import {
   type AgStudioMode,
 } from 'ag-studio'
 import { AgStudio, AgStudioProvider } from 'ag-studio-react'
-import { api, ApiError, type PaypalTables, type StudioRow } from '../api/client'
+import { api, ApiError, type PaypalTables, type Reconciliation, type StudioRow } from '../api/client'
 import { MandateDiff } from '../features/learn/MandateDiff'
 import { LineageDrawer } from '../features/lineage/LineageDrawer'
 import { buildAi } from './ai'
 import { PaypalDetailDrawer, type PaypalSelection } from './PaypalDetailDrawer'
 import { paypalPages, paypalSources } from './paypalReport'
+import { reconcilePage, reconcileSource } from './reconcileReport'
 import { pactguardTheme } from './theme'
 
 if (import.meta.env.DEV) enableStudioDevValidations()
@@ -82,7 +83,7 @@ const fields: AgFieldDefinition[] = [
 
 const MONEY = ['amount', 'savings', 'payout_net'] as const
 
-function toSources(rows: StudioRow[], paypal: PaypalTables | null): AgDataSourcesDefinition {
+function toSources(rows: StudioRow[], paypal: PaypalTables | null, recon: Reconciliation | null): AgDataSourcesDefinition {
   const data = rows.map((r) => {
     const out: Record<string, string | number | Date | null> = { ...r }
     for (const k of MONEY) out[k] = r[k] == null ? null : Number(r[k])
@@ -101,7 +102,7 @@ function toSources(rows: StudioRow[], paypal: PaypalTables | null): AgDataSource
       'PactGuard AI procurement runs ("Transactions": one row per purchase, from the hash-chained evidence ledger) next to the merchant ' +
       `PayPal sandbox account's own data (${paypal.source === 'live' ? 'read live from the sandbox' : 'a fixed replay fixture'}): invoices, line items, payments, ` +
       'catalog products, billing plans, the account ledger, payouts and balances. Transactions.capture_id joins to PayPal Transactions.id. Invoices are in USD or EUR and are not converted, so filter by currency before summing money.',
-    sources: [ledger, ...pp.sources],
+    sources: [ledger, ...pp.sources, ...(recon ? [reconcileSource(recon)] : [])],
     relationships: pp.relationships,
     calendars: pp.calendars,
     expressions: pp.expressions,
@@ -245,17 +246,19 @@ const report: AgReportState = {
 const PAGE_TITLES: Record<string, string> = {
   overview: 'Purchases',
   activity: 'Agent Activity',
+  reconciliation: 'Reconciliation',
   revenue: 'Revenue',
   receivables: 'Receivables',
   cash: 'Cash',
   catalogue: 'Catalogue',
 }
 
-const AGENT_PAGES = new Set(['overview', 'activity'])
+const AGENT_PAGES = new Set(['overview', 'activity', 'reconciliation'])
 
 const PAGE_HINTS: Record<string, string> = {
   overview: 'Click a purchase row to trace its sealed lineage, or click a Capture ID to inspect its PayPal transaction.',
-  activity: 'Derived directly from the hash-chained ledger: firewall decisions, sub-ms latency, human overrides and escalations.',
+  activity: 'Derived directly from the hash-chained ledger: firewall decisions, firewall latency, human overrides and escalations.',
+  reconciliation: 'Each captured agent purchase against the PayPal account ledger, matched by capture ID. Simulated rows (seeded history, replay) have no PayPal object by design.',
   revenue: 'Merchant PayPal invoices and collections (filter by currency above). Click an invoice row to inspect line items and payments.',
   receivables: 'Open and overdue PayPal invoices by aging bucket. Click an invoice row to inspect customer and payment history.',
   cash: 'PayPal account balances, payout campaigns and 31-day Transaction Search ledger. Click any row to inspect transaction and linked agent purchase.',
@@ -268,8 +271,9 @@ const pageFromHash = (): string => {
 }
 
 // One report with page tabs: the purchase ledger's overview & activity first, then the PayPal account pages when they loaded.
-const reportWith = (paypal: PaypalTables | null, requestedPageId: string): AgReportState => {
-  const pages = paypal ? [...(report.pages ?? []), ...paypalPages] : (report.pages ?? [])
+const reportWith = (paypal: PaypalTables | null, recon: Reconciliation | null, requestedPageId: string): AgReportState => {
+  const agent = report.pages ?? []
+  const pages = paypal ? [...agent, ...(recon ? [reconcilePage] : []), ...paypalPages] : agent
   const selectedPageId = pages.some((p) => p.id === requestedPageId) ? requestedPageId : 'overview'
   return { ...report, selectedPageId, pages }
 }
@@ -287,6 +291,7 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   // Studio reads its data and initialState once, when it is created, so everything loads before it mounts.
   // The PayPal tables are optional: if the sandbox read fails, the purchase ledger still shows.
   const [paypal, setPaypal] = useState<PaypalTables | null | undefined>(undefined)
+  const [recon, setRecon] = useState<Reconciliation | null>(null)
   const [refreshingPaypal, setRefreshingPaypal] = useState(false)
   const apiRef = useRef<AgStudioApi | null>(null)
   const [pageId, setPageId] = useState(pageFromHash)
@@ -303,36 +308,49 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
       .catch((e) => setError(String(e)))
   }, [runId])
 
-  const loadPaypal = useCallback((refresh = false) => {
-    api
-      .studioPaypal(false, refresh)
-      .then((p) => {
-        setPaypalError(null)
-        setPaypal(p)
-        setLiveReportingNotice(null)
-      })
-      .catch((e) => {
-        // Only a permission failure (403, e.g. Transaction Search not enabled on the sandbox app) falls back to the fixture.
-        // Anything else is shown as an error with Retry, so a real outage is never passed off as replay data.
-        if (!(e instanceof ApiError && e.status === 403)) {
-          setPaypal(null)
-          setPaypalError(String(e))
-          return
-        }
-        return api
-          .studioPaypal(true)
-          .then((p) => {
-            setPaypalError(null)
-            setPaypal(p)
-            setLiveReportingNotice('sandbox app lacks permission for the live read')
-          })
-          .catch((e2) => {
+  // The reconciliation table is derived from the same PayPal read, so both are set together. It is optional:
+  // if it fails, the other pages still render without that tab.
+  const settle = useCallback(
+    (p: PaypalTables, notice: string | null) =>
+      api
+        .studioReconciliation(p.source === 'replay')
+        .catch(() => null)
+        .then((r) => {
+          setPaypalError(null)
+          setPaypal(p)
+          setRecon(r)
+          setLiveReportingNotice(notice)
+        }),
+    [],
+  )
+
+  const loadPaypal = useCallback(
+    (refresh = false) => {
+      api
+        .studioPaypal(false, refresh)
+        .then((p) => settle(p, null))
+        .catch((e) => {
+          // Only a permission failure (403, e.g. Transaction Search not enabled on the sandbox app) falls back to the fixture.
+          // Anything else is shown as an error with Retry, so a real outage is never passed off as replay data.
+          if (!(e instanceof ApiError && e.status === 403)) {
             setPaypal(null)
-            setPaypalError(String(e2))
-          })
-      })
-      .finally(() => setRefreshingPaypal(false))
-  }, [])
+            setRecon(null)
+            setPaypalError(String(e))
+            return
+          }
+          return api
+            .studioPaypal(true)
+            .then((p) => settle(p, 'sandbox app lacks permission for the live read'))
+            .catch((e2) => {
+              setPaypal(null)
+              setRecon(null)
+              setPaypalError(String(e2))
+            })
+        })
+        .finally(() => setRefreshingPaypal(false))
+    },
+    [settle],
+  )
 
   useEffect(() => {
     loadPaypal(false)
@@ -362,8 +380,8 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
     return () => removeEventListener('hashchange', onHash)
   }, [selectPage])
 
-  const data = useMemo(() => (rows && paypal !== undefined ? toSources(rows, paypal) : null), [rows, paypal])
-  const initialState = useMemo(() => reportWith(paypal ?? null, pageId), [paypal, pageId])
+  const data = useMemo(() => (rows && paypal !== undefined ? toSources(rows, paypal, recon) : null), [rows, paypal, recon])
+  const initialState = useMemo(() => reportWith(paypal ?? null, recon, pageId), [paypal, recon, pageId])
   const ai = useMemo(() => (aiModel ? buildAi(aiModel) : undefined), [aiModel])
 
   if (error)
@@ -478,19 +496,19 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
     <div className="flex h-full flex-col">
       <div
         className="flex flex-wrap items-center gap-x-3 gap-y-1 overflow-x-auto border-b border-slate-200 bg-white px-6 pt-1.5"
-        role="tablist"
+        role="group"
         aria-label="Report pages"
         onKeyDown={onTabKeyDown}
       >
-        <div className="flex items-center gap-1">
-          <span className="mr-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-indigo-700 uppercase">
+        <div className="flex items-center gap-1" role="tablist" aria-label="Agent pages">
+          <span aria-hidden="true" className="mr-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-indigo-700 uppercase">
             Agent
           </span>
           {agentPages.map((p) => renderTab(p.id))}
         </div>
         {accountPages.length > 0 && (
-          <div className="flex items-center gap-1 border-l border-slate-200 pl-3">
-            <span className="mr-1 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-sky-800 uppercase">
+          <div className="flex items-center gap-1 border-l border-slate-200 pl-3" role="tablist" aria-label="PayPal account pages">
+            <span aria-hidden="true" className="mr-1 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-sky-800 uppercase">
               PayPal account
             </span>
             {accountPages.map((p) => renderTab(p.id))}
