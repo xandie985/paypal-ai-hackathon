@@ -13,6 +13,7 @@ const DOMAIN = `You are the analyst inside PactGuard AI's Command Center, an AG 
 - "status" is CAPTURED once PayPal captured the payment, or REJECTED if a human declined it. Only captured purchases are real spend.
 - "savings" is measured against the retail baseline. "supplier_trust" is the per-vendor score (0-100%) learned from delivery proof and dispute outcomes. "dispute_outcome" is WON, LOST or SETTLED, and "dispute_win_odds" is the desk's estimated win probability.
 - The other tables are the merchant's own PayPal sandbox account (they can be absent if the sandbox read failed): "PayPal Customers" (invoice recipients), "PayPal Invoices" (status, due date, paid, outstanding, overdue and aging), "Invoice Line Items", "Invoice Payments" (payments and refunds; "Net Cash" is signed), "PayPal Products", "Billing Plans" (monthly-normalised price, trial days), "PayPal Transactions" (the account ledger from Transaction Search, last 31 days, signed amounts), "PayPal Payouts" (positive amounts, grouped into campaigns) and "PayPal Balances".
+- "Agent vs PayPal" is a derived table, one row per captured agent purchase matched to the PayPal account ledger by capture ID (plus PayPal purchase captures the agent never decided). "Reconciliation Status" is Matched, Amount mismatch, Pending (captured within the last few hours, Transaction Search may lag), Outside window (older than the 31 days Transaction Search covers), Unsettled (no PayPal transaction in the window), Simulated (seeded history or replay: no PayPal object exists, not a problem) or Not decided by agent. It powers the Reconciliation page.
 - "Transactions.capture_id" is related many-to-one to "PayPal Transactions.id", linking an agent purchase decision to the PayPal capture that moved the money. Invoices are related to customers, and line items and payments to invoices; plans to products. Their pages are Revenue, Receivables, Cash and Catalogue. Invoices are USD or EUR and not converted, so filter by currency before summing them.
 - Purchase amounts are USD. Prefer the existing fields over inventing new ones, and say plainly when the data cannot answer a question.`
 
@@ -28,6 +29,10 @@ const PROMPT_STARTERS: AgAiPromptStarter[] = [
   {
     label: 'Agent captures in PayPal',
     prompt: 'Which captured agent purchases in Transactions match a row in PayPal Transactions by capture_id, and what were their PayPal fees and net amounts?',
+  },
+  {
+    label: 'Agent vs PayPal',
+    prompt: 'Which agent purchases are not matched in the PayPal account ledger, and what are the PayPal fees and net cash impact of the ones that are?',
   },
   {
     label: 'Lost disputes',

@@ -138,6 +138,24 @@ export type PaypalTables = {
   payouts: PaypalRow[]
   balances: PaypalRow[]
 }
+/** Agent captures against the PayPal account ledger (GET /studio/reconciliation). */
+export type ReconciliationRow = {
+  id: string
+  lineageId: string | null
+  origin: string | null
+  vendor: string | null
+  category: string | null
+  date: string | null
+  agentAmount: number | null
+  paypalAmount: number | null
+  paypalFee: number | null
+  netCash: number | null
+  difference: number | null
+  status: string
+  note: string
+  paypalId: string | null
+}
+export type Reconciliation = { source: 'live' | 'replay'; asOf: string; rows: ReconciliationRow[]; summary: Record<string, number> }
 export type RunEvent = { seq: number; stage: string; event: string; [k: string]: unknown }
 export type MandateInput = {
   principal: string
@@ -269,6 +287,7 @@ export const api = {
     if (refresh) q.set('refresh', 'true')
     return call<PaypalTables>('GET', `/studio/paypal${q.size ? `?${q}` : ''}`)
   },
+  studioReconciliation: (fixture?: boolean) => call<Reconciliation>('GET', `/studio/reconciliation${fixture ? '?fixture=true' : ''}`),
   studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
   studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
   runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),

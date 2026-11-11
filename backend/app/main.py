@@ -8,6 +8,7 @@ from .ai_proxy import router as ai_router
 from .api import router
 from .config import settings
 from .studio_paypal import router as studio_paypal_router
+from .studio_reconcile import router as studio_reconcile_router
 
 app = FastAPI(title="PactGuard AI")
 app.add_middleware(
@@ -19,6 +20,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(ai_router)
 app.include_router(studio_paypal_router)
+app.include_router(studio_reconcile_router)
 
 
 @app.get("/api/health")
