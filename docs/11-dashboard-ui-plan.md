@@ -98,6 +98,8 @@ Audited on 2026-11-01 against commit `59e0884`.
 | Studio data | `GET /api/studio/rows` returns one flat table plus KPIs, with `created_at` / `updated_at` (newest first), `source` (run or seeded) and a frozen column contract (`s09_observe.ROW_COLUMNS`). `?history=true` adds ~60 seeded purchases over 28 days. | The multi-table model (§8, `GET /api/studio/sources`) is still to do |
 | AI | `integrations/llm.py` (Claude) exists on the backend. No browser-facing AI route. | We need a Claude adapter and a FastAPI proxy (§10) |
 
+> **Update (2026-11-12).** This table is the 2026-11-01 audit, kept as written. Since then: the Command Center is a six-page report (Purchases, Agent Activity, Revenue, Receivables, Cash, Catalogue) with host-drawn grouped tabs, a hash-synced selected page, a Live/Replay chip with Refresh, loading and error states, and two detail drawers (lineage and PayPal) joined on `capture_id`. The Claude adapter and `app/ai_proxy.py` exist, and the Studio assistant runs on Claude Haiku 5.5. The Studio theme is in `src/studio/theme.ts`; the `src/ui/` primitives of §4.6 were not created. The multi-table model of §8 was not built as specified; the agent's data is one flat `Transactions` table, joined to PayPal account tables.
+
 ---
 
 ## 4. Design system
@@ -264,6 +266,8 @@ Below 1024 px wide, the columns stack and the Mandate card collapses into a summ
 | **Audit** | `grid` transactions, **W3 Lineage Chain**, `pivot-grid` vendor × route, `value` chain status | "Every action is sealed and traceable" |
 | **Defend** (Phase 3) | `radial-gauge` dispute win odds, `grid` disputes, `bar-chart-stacked` payout gross vs net, nudge scoreboard (Could) | "We defend from the seal and pay out only when verified" |
 | **Incidents** (built live by the agent) | Whatever the Sentinel builds | "Agents use the dashboard too" |
+
+> **As built (2026-11-12).** The pages shipped differ from this sketch. **Agent group:** `Purchases` (spend, savings by vendor and category, firewall routes by week, dispute outcomes beside supplier trust, the transactions grid) and `Agent Activity` (firewall decisions, latency, human escalations, an escalations queue). **PayPal account group:** `Revenue`, `Receivables`, `Cash`, `Catalogue`. The custom widgets W1 to W5 and the Sentinel's Incidents page were not built. Studio draws no page tabs, so the host draws them.
 
 **Present vs Edit:** Present maps to Studio `mode="view"` with the panels hidden. It's the default, and the one we record. Edit maps to `mode="edit"`. "↺ Curated" restores the curated `initialState` through `api.setState` (remember to re-sync anything that listens for state changes; see §6.10).
 
@@ -682,6 +686,8 @@ UI-5 present     |                     |           |           |   ███ | �
 | UI-2.13 | AI replay fixtures (§10.3) | UI-2.6 | Demo prompts build the same widgets offline |
 
 **Exit:** doc 10's Phase 2 exit, plus §2.1's table holds for every Must row.
+
+> **Status (2026-11-12).** Built: the data definition, a curated six-page report, the theme, the Claude adapter and proxy (UI-2.6), the assistant with prompt starters, the lineage drawer and mandate diff (UI-2.8). Not built: the custom widgets W1 to W5 (UI-2.5, UI-2.9, UI-2.11), the Sentinel (UI-2.10), WebMCP (UI-2.12), AI replay fixtures (UI-2.13), `localStorage` persistence and the curated reset (part of UI-2.3), and the `GET /api/studio/sources` endpoint of §8.
 
 ### UI-3: Defend and Pay out (alongside doc 10 Phase 3, Sat Nov 7 – Mon Nov 9)
 

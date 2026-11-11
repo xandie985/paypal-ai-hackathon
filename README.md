@@ -22,7 +22,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 ```bash
 make setup      # venv, npm install, copies .env.example to .env
-make test       # 147 tests
+make test       # 155 tests
 make backend    # API on :8000 (REPLAY_MODE=true runs everything offline)
 make frontend   # UI on :5173, in a second terminal
 ```
@@ -46,7 +46,7 @@ To use the live sandbox, set `REPLAY_MODE=false` and fill in the PayPal and Chan
 | 7 Webhooks | Real endpoint and raw-body verification, unit-tested. Not yet checked against a real PayPal sandbox event. |
 | 8 Defend | Reads **real sandbox disputes** and answers through PayPal's dispute actions. The multipart `provide-evidence` upload is verified against the replay gateway, not yet against a live case. |
 | 9 Observe | Real. AG Studio over the ledger (`Purchases` and `Agent Activity` pages), with a seeded history of past purchases built through the same step functions. |
-| 9 Observe, PayPal pages | Real code, **two data modes**. The Command Center's Revenue, Receivables, Cash and Catalogue pages read the merchant's own PayPal account (invoices, payments, catalog products, billing plans, Transaction Search for the last 31 days, payouts, balances) through `GET /api/studio/paypal`, and join `Transactions.capture_id` to `PayPal Transactions.id` so an agent purchase links directly to its PayPal settlement. **Live** (`REPLAY_MODE=false` with sandbox keys) reads the sandbox account itself (falls back to the replay fixture only when PayPal answers 403, e.g. Transaction Search is not enabled on the sandbox app; any other failure is shown as an error, never as fixture data); the public replay demo serves a small **fixed fixture** of PayPal-shaped responses (fictional merchant, dated 2026-11-05) through the same transformation code. |
+| 9 Observe, PayPal pages | Real code, **two data modes**. The Command Center's Revenue, Receivables, Cash and Catalogue pages read the merchant's own PayPal account (invoices, payments, catalog products, billing plans, Transaction Search for the last 31 days, payouts, balances) through `GET /api/studio/paypal`, and join `Transactions.capture_id` to `PayPal Transactions.id` so an agent purchase links directly to its PayPal settlement. **Live** (`REPLAY_MODE=false` with sandbox keys) reads the sandbox account itself (falls back to the replay fixture only when PayPal answers 403, e.g. Transaction Search is not enabled on the sandbox app; any other failure is shown as an error, never as fixture data); the public replay demo serves a small **fixed fixture** of PayPal-shaped responses (fictional merchant, dated 2026-11-05) through the same transformation code. The replay fixture includes purchase captures with the seeded history's `CAP-0000xx` IDs, so the agent-to-PayPal join works in replay too; it is a fixture, not your sandbox data. The live read has so far been exercised against a mock PayPal only. |
 
 ## Evaluation
 

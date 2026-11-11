@@ -21,7 +21,7 @@ This is the engineering companion to the strategy docs (01–08). It turns the f
 | 6 Reconcile | HaystackAP | Invoice forensics: 3-way match, spoof, duplicates | `app/stages/s06_reconcile.py` | Mock (one flagged invoice) | ✅ |
 | 7 Pay out & Collect | ChronoPay | Payouts v1, gross-to-net, webhooks, nudges | `app/stages/s07_payout.py` | Mock (single payout) | ✅ live verified (batch UYPJ27MNP6X5J) |
 | 8 Defend | AegisPay | Evidence from ledger → PDF → `provide-evidence` | `app/stages/s08_defend.py` | **Thin but live** | ✅ live verified (PP-D-1001 odds 0.95) |
-| 9 Observe | PayPulse / AG Studio | Row data + KPIs for AG Grid / Studio | `app/stages/s09_observe.py`, `GET /api/studio/rows` | **Real** | ✅ data / ❌ UI |
+| 9 Observe | PayPulse / AG Studio | Row data + KPIs for AG Grid / Studio | `app/stages/s09_observe.py`, `GET /api/studio/rows` | **Real** | ✅ data / ✅ UI (Command Center, six pages) |
 | 10 Learn | Feedback | Supplier trust, threshold calibration, new mandate version | `app/stages/s10_learn.py` | Mock (rule-based before/after) | ✅ |
 
 The demo arc is wired in `app/orchestrator.py::run_demo` and exposed at `POST /api/demo/run`.
@@ -384,6 +384,7 @@ The first dispute taken from open to closed live, through the desk, on order `6A
 | Still scripted | Stage 6 invoice forensics, stage 7 payout release after verification, stage 10 calibration shown as before/after |
 | Tests | 101 passing, ruff clean, frontend builds |
 | **Next: Phase 2** (doc 10 §4) | Seeded history through the real step functions, `test_studio_row_columns_are_stable`, three custom Studio widgets, the lineage timeline from a grid row, the mandate v1 → v2 diff. The Studio rows already carry `order_id`, `capture_id`, `created_at`, `updated_at`, `dispute_win_odds` and `dispute_outcome`. |
+| Phase 2 to 4 progress (2026-11-12) | Merged to `main` (PRs #4, #5): the Command Center (Purchases, Agent Activity, and the PayPal account pages Revenue, Receivables, Cash, Catalogue), the PayPal webhook endpoint, the Render files, the evaluation harness and the judge-facing README. 155 tests pass, ruff check and frontend lint are clean. Open: live PayPal account read (mock-tested only), webhook and `provide-evidence` against real sandbox objects, Render deploy, APIMatic. Details: doc 10 §6. |
 | Phase 2 progress (2026-11-06) | Seeded history (`app/seed.py`, 30 mandates through the real step functions) and the frozen Studio row contract are done; see doc 10 Phase 2. Carried-forward items are tracked in doc 10 §6 Backlog. |
 
 ### ⚠️ Test isolation fix (2026-11-06)
@@ -393,6 +394,8 @@ Before this fix, `pytest` wrote to the real persistent ledger. Tests that switch
 `tests/conftest.py` now points `LEDGER_PATH` at a throwaway temp directory before the app is imported, and `tests/test_isolation.py` asserts it.
 
 **If you ran the tests from `backend/` with a live ledger in place, that `ledger.db` contains test runs mixed with real evidence.** The ledger is append-only, so they can't be removed in place. Either keep the file and note it here (lineages from test runs are visible in `GET /api/ledger`), or start a fresh ledger file for the next live run.
+
+**Note on the local dev ledger (added 2026-11-12).** The gitignored `ledger.db` files were later pruned by hand in a local session to remove test orders from before the isolation fix, keeping the real sandbox lineages. The hash chain still verifies (`verify()` returned `(True, None)` on a copy: 20 entries, 8 lineages). The change is local only: nothing was committed, and a Render deploy starts with a fresh ledger.
 
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.

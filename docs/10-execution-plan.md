@@ -12,6 +12,8 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
+> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5). The Command Center grew from one flat table into a six-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 155 tests pass. Still open: the live PayPal read (only mock-tested), the Render deploy, APIMatic, and the backlog in §6.
+
 ---
 
 ## 1. Current state
@@ -70,7 +72,7 @@ Every design choice below traces to a paper in doc 02. Doc 09 §7 notes that the
 |---|---|---|
 | Core primitives: ledger, lineage, gates, money | Built, with tests | None |
 | Stages 1–10 | Built. The full arc runs in replay mode. | Stages 5, 6, 7 and 10 are scripted rather than live |
-| Tests | 147 passing (2026-11-06) | None |
+| Tests | 155 passing (2026-11-12) | None |
 | API, [`api.py`](../backend/app/api.py) | `POST /api/demo/run`, `GET /api/ledger`, `/ledger/verify`, `/studio/rows` | **`/demo/run` is one synchronous call.** A UI can't pause for human approval, and a real PayPal order can't wait for buyer approval. This is the first task in Phase 1. |
 | Orchestrator, [`orchestrator.py`](../backend/app/orchestrator.py) | `run_demo` runs the whole arc and calls `asyncio.run(negotiate(...))` | `asyncio.run` can't be called from inside an async endpoint. Negotiation has to be awaited directly. |
 | PayPal client, [`integrations/paypal.py`](../backend/app/integrations/paypal.py) | `SandboxPayPal` covers Orders v2, Invoicing v2, Payouts v1, `provide-evidence` and webhook verify, with OAuth caching | Run live in Phases 0 and 1. Webhook verification now takes the raw body (Phase 3, pain point #11). |
@@ -316,7 +318,7 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 
 - [x] Seeded history through the real step functions (`app/seed.py`, `?history=true`)
 - [x] Frozen Studio row contract, checked against the frontend (`tests/test_studio_contract.py`)
-- [x] Decide: keep the single flat table (decided 2026-11-06). The multi-table model (doc 11 §8) is not needed for the widgets.
+- [x] Decide: keep the single flat table (decided 2026-11-06). The multi-table model (doc 11 §8) is not needed for the widgets. **Superseded 2026-11-12:** the PayPal pages added more Studio data sources; see the addendum below. The agent's own data is still the one flat `Transactions` table.
 - [x] Widget 1: saved vs retail by vendor and category, on captured purchases only (`column-chart-grouped`)
 - [x] Widget 2: firewall routes by week (`column-chart-stacked` on `created_at::week`)
 - [x] Widget 3: dispute outcomes by supplier (`bar-chart-stacked`, disputed rows only) beside supplier trust (new `supplier_trust` column, same formula as `s10_learn.supplier_trust`; payout attacks unscored)
@@ -325,6 +327,16 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 - [x] `GET /api/runs/{id}/calibration` (read-only preview) and the mandate v1 → v2 diff (`GET /api/studio/calibrations` for the seeded history, `MandateDiff` panel)
 - [x] Studio Agent natural-language prompts over the data (read-only: it can't move money). Claude Haiku 5.5 through `app/ai_proxy.py` and `src/studio/claudeAdapter.ts`; verified live 2026-11-06: "Add a chart of captured savings by category" ran the orchestrator, Page agent and Widget agent and added the widget
 - [x] Exit check: a Studio prompt builds a widget from run plus seeded data, a row opens its lineage, the mandate diff is visible
+
+**Phase 2 addendum (2026-11-12), merged to `main`**
+
+- [x] **PayPal account pages** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), adapted from the hackathon's AG Grid boilerplate. Backend: `app/studio_paypal.py`, `GET /api/studio/paypal` (60 s cache; `?refresh=true` bypasses it, `?fixture=true` forces the fixture). Frontend: `src/studio/paypalReport.ts`. Two data modes: **live** sandbox read, or a fixed **replay fixture** dated 2026-11-05.
+- [x] **Failure handling:** a live-read 403 (a missing permission such as Transaction Search) falls back to the fixture with a visible notice; any other failure shows an error with Retry and is never passed off as fixture data. A failed PayPal read never blanks the `Purchases` or `Agent Activity` pages.
+- [x] **Agent Activity page** (`#/studio/activity`), derived from the hash-chained ledger rather than an invented agent store: firewall decisions, auto-settled, escalated, average firewall latency, decisions by day and route, latency by route, human escalation outcomes, dispute win odds by supplier, and an escalations and blocked-proposals grid.
+- [x] **Agent to PayPal join:** `Transactions.capture_id` is related many-to-one to `PayPal Transactions.id`. Detail drawers open both ways: a capture cell opens the PayPal transaction (with the linked agent purchase), and the lineage drawer links back to its PayPal capture. Invoice rows open an invoice drawer.
+- [x] **Host UI:** grouped tabs, the selected page kept in the URL hash (`#/studio/<page>`), arrow-key, Home and End tab navigation, per-page hints, a Live or Replay chip with an "as of" time and Refresh, a loading skeleton, and Retry on failure. Revenue has a currency switch (USD preselected) because invoices are USD or EUR and are not converted.
+- [x] **Fix:** `GET /api/studio/lineage/{id}` also resolves rows from the persistent runtime ledger after a restart.
+- [ ] Not verified: the live sandbox read has only run against a mock PayPal. Transaction Search was enabled on the sandbox app afterwards, but no live read has been confirmed yet.
 
 ---
 
@@ -390,6 +402,8 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 **Exit:** `provide-evidence` accepted on the real sandbox dispute, or the fallback has been recorded. The webhook endpoint verifies a real sandbox event. The payout is blocked and then released on screen.
 
 > 🟡 **Partly done early (2026-11-06).** The dispute desk runs live (offers, return acknowledgement, outcome sync). Still open: a live `provide-evidence` submission, the webhook endpoint against a real sandbox event, and the on-screen payout block/release.
+>
+> **Update (2026-11-12):** the webhook endpoint (`POST /api/webhooks/paypal`, raw-body verification, durable inbox) is built and unit-tested. It has not received a real PayPal event yet.
 
 ---
 
@@ -431,7 +445,7 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 - [ ] 4b APIMatic: not started and not claimed anywhere (needs the account, B-7). The README says so.
 - [x] 4c Evaluation harness `backend/eval/` with `RESULTS.md`, also run as tests. It found paraphrased prompt injection slipping past the regex tripwire; the patterns were widened using the dev phrases only and the held-out catch rate (1 of 5) is reported as a known gap.
 - [x] 4d README rewritten for judges. [ ] Add the live URL after deploying.
-- [ ] 4e UI polish sweep.
+- [~] 4e UI polish sweep: largely done for the Command Center (formats, grouped tabs, hints, provenance chip, loading and error states, drawers, keyboard navigation). Not covered: the Mission Control screens, narrow-viewport checks and dark mode.
 
 ---
 
@@ -467,6 +481,11 @@ Open items from later phases, kept here so they aren't lost while Phase 2 runs. 
 - [ ] **Live `provide-evidence` submission.** Multipart, with the PDF brief, on a real sandbox dispute. Only the replay double has received it so far.
 - [ ] **Webhook signature verification against a real sandbox event.** The endpoint (`POST /api/webhooks/paypal`) verifies against the raw bytes, de-duplicates through the ledger and is unit-tested, including that the received bytes are spliced into the verify request untouched. Still open: a real PayPal event. It needs the deployed URL registered as a webhook in the sandbox app, and `PAYPAL_WEBHOOK_ID` set (pain point #11).
 - [ ] **On-screen payout block and release.** Stage 7 payout without the VERIFIED and RECONCILED gate tokens is refused, then released. It's proven in tests and the demo arc, but not shown in the UI.
+- [ ] **Live PayPal account read.** `GET /api/studio/paypal` against the real sandbox account has only run against a mock. Enable Transaction Search on the sandbox app, restart the backend, click Refresh and confirm the chip turns green; then update the README. The sandbox merchant currently has no products, plans or invoices, so Revenue, Receivables and Catalogue will be empty live unless it is seeded.
+- [ ] **Agent-to-PayPal reconciliation page (proposed).** Use the `capture_id` join to list matched captures, unmatched captures, amount mismatches, and PayPal purchase captures the agent never decided, with fee and net-cash KPIs.
+- [ ] **Command Center loose ends:** the tab strip puts non-tab elements inside `role="tablist"`; the Agent Activity hint says "sub-ms latency" without a computed figure; the Revenue invoice-date filter has no default period (Studio 3.0 does not apply a relative date filter from saved state on load); Mission Control narrow-viewport and dark-mode checks.
+- [ ] **Licence for the boilerplate.** The README credits `paypaldev/hackathon-paypal-ag-grid-boilerplate`, which has no licence file. A person should confirm the wording.
+- [ ] `backend/eval/firewall_cases.py` and `backend/eval/run_all.py` fail `ruff format --check`; they were that way before the Command Center work.
 - [ ] **Stages 6, 7 and 10 are still scripted.** Invoice forensics, payout release and calibration run in replay and seeded history, not on live sandbox objects.
 
 ## 7. What we are not building
