@@ -1,23 +1,26 @@
 import asyncio
 import json
+import threading
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import runs
 from .config import settings
-from .core.errors import GuardViolation
+from .core.errors import GuardViolation, WebhookUnverified
 from .core.ledger import EvidenceLedger, open_ledger
 from .domain.models import DeliveryReport, Mandate
 from .integrations.llm import make_llm
 from .integrations.paypal import PayPalAPIError, make_gateway
 from .orchestrator import Runtime, run_demo
-from .stages import s05_verify, s08_defend
-from .stages.s09_observe import kpis, transaction_rows
+from .stages import s05_verify, s08_defend, s10_learn
+from .stages.s09_observe import kpis, transaction_rows, with_supplier_trust
 
 router = APIRouter(prefix="/api")
 _rt: Runtime | None = None
@@ -53,15 +56,17 @@ def ledger_verify():
 
 
 _history = None
+_history_lock = threading.Lock()
 
 
 def history_ledger():
     """Seeded history, built once per process through the real step functions (app/seed.py)."""
     global _history
-    if _history is None:
-        from .seed import build_history
+    with _history_lock:  # two first requests must not both pay for (and race on) the build
+        if _history is None:
+            from .seed import build_history
 
-        _history = build_history()
+            _history = build_history()
     return _history
 
 
@@ -78,7 +83,35 @@ def studio_rows(run_id: str | None = None, history: bool = False):
     if history:
         rows += [{**r, "source": "seeded"} for r in transaction_rows(history_ledger())]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
+    rows = with_supplier_trust(rows)
     return {"rows": rows, "kpis": kpis(rows)}
+
+
+@router.get("/studio/lineage/{lineage_id}")
+def studio_lineage(lineage_id: str):
+    """One purchase's sealed ledger entries, from whichever ledger holds it (runs first, then persistent ledger, then seeded history)."""
+    candidates = [("run", r.rt.ledger) for r in reversed(list(runs.RUNS.values()))] + [
+        ("run", runtime().ledger),
+        ("seeded", history_ledger()),
+    ]
+    for source, ledger in candidates:
+        entries = ledger.entries(lineage_id)
+        if entries:
+            ok, bad = ledger.verify()
+            return {
+                "source": source,
+                "lineage_id": lineage_id,
+                "chain_ok": ok,
+                "first_bad_seq": bad,
+                "entries": [e.__dict__ for e in entries],
+            }
+    raise HTTPException(404, f"no ledger entries for {lineage_id}")
+
+
+@router.get("/studio/calibrations")
+def studio_calibrations():
+    """Mandate v1 -> v2 changes that stage 10 already made across the seeded history."""
+    return {"calibrations": s10_learn.calibrations(history_ledger())}
 
 
 @router.get("/studio/history/verify")
@@ -125,7 +158,9 @@ def _guarded(fn, *args):
 async def start_run(body: StartRun | None = None):
     body = body or StartRun()
     try:
-        run = await runs.start_run(settings, body.mandate, body.needs)
+        # A live run makes blocking HTTP calls (Channel3, PayPal) for seconds. Running it on a worker thread with
+        # its own loop keeps health checks, SSE keepalives and other requests responsive meanwhile.
+        run = await run_in_threadpool(lambda: asyncio.run(runs.start_run(settings, body.mandate, body.needs)))
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return run.snapshot()
@@ -150,8 +185,9 @@ async def run_events(run_id: str, follow: bool = True):
 
     async def stream():
         q: asyncio.Queue = asyncio.Queue()
+        sub = (asyncio.get_running_loop(), q)
         backlog = list(run.events)
-        run.subscribers.append(q)  # subscribe before yielding so nothing is missed between backlog and live
+        run.subscribers.append(sub)  # subscribe before yielding so nothing is missed between backlog and live
         try:
             seen = len(backlog)
             for e in backlog:
@@ -169,9 +205,26 @@ async def run_events(run_id: str, follow: bool = True):
                 if e["seq"] >= seen:
                     yield f"data: {json.dumps(e)}\n\n"
         finally:
-            run.subscribers.remove(q)
+            run.subscribers.remove(sub)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/runs/{run_id}/calibration")
+def run_calibration(run_id: str):
+    """What stage 10 would change for this run's mandate right now. Read-only: nothing is written."""
+    run = _run(run_id)
+    p = s10_learn.plan(run.rt.ledger, run.mandate, run.mandate_lineage)
+    before = run.mandate.model_dump(mode="json")
+    after = p["new"].model_dump(mode="json") if p["new"] else None
+    return {
+        "changed": after is not None,
+        "changes": p["changes"],
+        "trust": p["trust"],
+        "before": before,
+        "after": after,
+        "diff": s10_learn.mandate_diff(before, after) if after else [],
+    }
 
 
 @router.get("/runs/{run_id}/ledger")
@@ -477,3 +530,61 @@ def simulate_return(dispute_id: str, body: SimulateReturn):
         raise HTTPException(409, e.to_dict()) from e
     case, _, _, a = _case(dispute_id)
     return _dec({"case": _case_json(case), "assessment": a})
+
+
+# --- PayPal webhooks (stage 7) ------------------------------------------------------------------------
+
+
+@router.post("/webhooks/paypal")
+async def paypal_webhook(request: Request):
+    """PayPal's delivery target. Verified against the raw bytes it sent, de-duplicated by event id (a retry
+    gets 200 with duplicate=true, so PayPal stops retrying), then stored in the ledger."""
+    raw = await request.body()
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "Body is not valid JSON.") from None
+    if not isinstance(event, dict) or not event.get("id"):
+        raise HTTPException(400, "Not a PayPal webhook event: no id.")
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    try:
+        # Verification is a blocking HTTP call to PayPal; keep it off the event loop.
+        return await run_in_threadpool(runtime().inbox.receive, headers, event, raw)
+    except WebhookUnverified as e:
+        raise HTTPException(401, e.to_dict()) from e
+
+
+@router.get("/webhooks")
+def webhook_events():
+    return {"events": runtime().inbox.listing(), "verification": "live" if settings.paypal_live else "replay"}
+
+
+@router.post("/webhooks/{event_id}/replay")
+def webhook_replay(event_id: str):
+    try:
+        return runtime().inbox.replay(event_id)
+    except KeyError:
+        raise HTTPException(404, f"No stored webhook event {event_id}.") from None
+
+
+class SimulatedWebhook(BaseModel):
+    event_type: str = "PAYMENT.CAPTURE.COMPLETED"
+    lineage_id: str | None = None
+    event_id: str | None = None  # send the same id twice to watch the duplicate being ignored
+
+
+@router.post("/webhooks/simulate")
+def webhook_simulate(body: SimulatedWebhook):
+    """Feeds a synthetic event through the same inbox as a real delivery. Replay mode only: live mode checks
+    PayPal's signature, which a synthetic event cannot carry."""
+    if not settings.replay_mode:
+        raise HTTPException(409, "Simulation is replay-only: live mode verifies real PayPal signatures.")
+    event = {
+        "id": body.event_id or f"WH-SIM-{uuid.uuid4().hex[:12].upper()}",
+        "event_type": body.event_type,
+        "summary": f"Simulated {body.event_type}",
+        "create_time": datetime.now(UTC).isoformat(timespec="seconds"),
+        "resource": {"id": f"SIM-{uuid.uuid4().hex[:10].upper()}", "custom_id": body.lineage_id},
+    }
+    out = runtime().inbox.receive({"paypal-transmission-sig": "simulated"}, event, json.dumps(event).encode())
+    return {**out, "event": event}

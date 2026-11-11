@@ -62,7 +62,7 @@ class PayPalGateway(Protocol):
     def list_disputes(self) -> list[dict]: ...
     def get_dispute(self, dispute_id: str) -> dict: ...
     def dispute_action(self, dispute_id: str, action: str, body: dict) -> dict: ...
-    def verify_webhook(self, headers: dict, body: dict) -> bool: ...
+    def verify_webhook(self, headers: dict, body: dict, raw: bytes | None = None) -> bool: ...
 
 
 class ReplayPayPal:
@@ -235,7 +235,7 @@ class ReplayPayPal:
             d["status"], d["links"] = "UNDER_REVIEW", []
         return {"links": [{"rel": "self", "href": f"/v1/customer/disputes/{dispute_id}"}]}
 
-    def verify_webhook(self, headers, body):
+    def verify_webhook(self, headers, body, raw=None):
         return self.webhooks_valid and "paypal-transmission-sig" in {k.lower() for k in headers}
 
 
@@ -269,6 +269,17 @@ class SandboxPayPal:
         if r.is_error:
             raise PayPalAPIError.from_response(r)
         return r.json()
+
+    def get_json(self, path: str, params: dict | None = None, attempts: int = 4) -> dict:
+        """Read-only GET for account reporting. Retries 429 and 5xx with backoff (the reporting APIs rate-limit)."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._get(path, params)
+            except PayPalAPIError as e:
+                if attempt == attempts or not (e.status == 429 or e.status >= 500):
+                    raise
+                time.sleep(2**attempt * 0.25)
+        raise AssertionError("unreachable")
 
     def list_disputes(self):
         return self._get("/v1/customer/disputes", {"page_size": 50}).get("items", [])
@@ -313,18 +324,31 @@ class SandboxPayPal:
             raise PayPalAPIError.from_response(r)
         return r.json() if r.content else {}
 
-    def verify_webhook(self, headers, body):
+    def verify_webhook(self, headers, body, raw=None):
         h = {k.lower(): v for k, v in headers.items()}
-        payload = {
+        fields = {
             "auth_algo": h.get("paypal-auth-algo"),
             "cert_url": h.get("paypal-cert-url"),
             "transmission_id": h.get("paypal-transmission-id"),
             "transmission_sig": h.get("paypal-transmission-sig"),
             "transmission_time": h.get("paypal-transmission-time"),
             "webhook_id": self._webhook_id,
-            "webhook_event": body,
         }
-        return self._post("/v1/notifications/verify-webhook-signature", payload).get("verification_status") == "SUCCESS"
+        if raw is None:
+            verified = self._post("/v1/notifications/verify-webhook-signature", {**fields, "webhook_event": body})
+            return verified.get("verification_status") == "SUCCESS"
+        # PayPal signs the exact bytes it sent. Parsing and re-dumping the event can change key order, spacing
+        # or number formatting, which is the usual cause of VERIFICATION_FAILURE, so splice the received bytes
+        # into the request untouched.
+        content = json.dumps(fields)[:-1].encode() + b', "webhook_event": ' + raw.strip() + b"}"
+        r = self._http.post(
+            "/v1/notifications/verify-webhook-signature",
+            content=content,
+            headers={"Authorization": f"Bearer {self._bearer()}", "Content-Type": "application/json"},
+        )
+        if r.is_error:
+            raise PayPalAPIError.from_response(r)
+        return r.json().get("verification_status") == "SUCCESS"
 
 
 def make_gateway(settings) -> PayPalGateway:

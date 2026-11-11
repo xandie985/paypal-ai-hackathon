@@ -2,7 +2,7 @@
 
 This is the engineering companion to the strategy docs (01–08). It turns the five ideas into **one closed loop** and maps every stage, hand-off guard and demo moment to code and a test that already exist in `backend/`.
 
-> **Status (2026-11-06):** All ten stages are implemented. The acquisition half (stages 1–4) and the dispute desk (stage 8) run live against the PayPal sandbox; stages 5, 6, 7 and 10 are scripted in replay, with stage 5 delivery proof also recordable live. `107` tests pass. Phase 1 is closed and stage 8 (planned for Phase 3) is done early; Phase 2 (Observe & Learn, AG Studio) is next. Live experiments are logged in §7; the open items are in the Phase close-out below.
+> **Status (2026-11-06):** All ten stages are implemented. The acquisition half (stages 1–4) and the dispute desk (stage 8) run live against the PayPal sandbox; stages 5, 6, 7 and 10 are scripted in replay, with stage 5 delivery proof also recordable live. `147` tests pass. Phases 0 and 1 are closed, stage 8 (planned for Phase 3) was done early, Phase 2 (Observe & Learn, AG Studio, including the Claude-backed Studio assistant) is built, and the webhook endpoint and the Render deploy files are in place. The evaluation harness is `backend/eval/`. Live experiments are logged in §7; the open items are in the Phase close-out below.
 
 ---
 
@@ -199,7 +199,7 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 
 | Item | State |
 |---|---|
-| `make setup` / `make test` | Done. 29 passing. |
+| `make setup` / `make test` | Done. 147 passing. |
 | Preflight script | `scripts/phase0_check.py`. Run 2026-10-31: 0 failed. B-1 PASS, B-2 PASS (payout batch created), B-4 WARN, B-5 PASS, B-8 skipped (optional). |
 | B-1 OAuth, B-2 Payouts | **Done.** Scopes include payouts, disputes, invoicing, vault, orders. Payouts v1 needs `currency` (fixed in `s07_payout.py`). |
 | B-4 Sandbox dispute | **Open.** The disputes API answers 200 but lists 0 disputes. Stage 8 uses the replay dispute `PP-D-1001` until one exists. |
@@ -385,6 +385,14 @@ The first dispute taken from open to closed live, through the desk, on order `6A
 | Tests | 101 passing, ruff clean, frontend builds |
 | **Next: Phase 2** (doc 10 §4) | Seeded history through the real step functions, `test_studio_row_columns_are_stable`, three custom Studio widgets, the lineage timeline from a grid row, the mandate v1 → v2 diff. The Studio rows already carry `order_id`, `capture_id`, `created_at`, `updated_at`, `dispute_win_odds` and `dispute_outcome`. |
 | Phase 2 progress (2026-11-06) | Seeded history (`app/seed.py`, 30 mandates through the real step functions) and the frozen Studio row contract are done; see doc 10 Phase 2. Carried-forward items are tracked in doc 10 §6 Backlog. |
+
+### ⚠️ Test isolation fix (2026-11-06)
+
+Before this fix, `pytest` wrote to the real persistent ledger. Tests that switch to live rules (for example, the saved-wallet test in `tests/test_paypal_sandbox.py`) start runs that append to `LEDGER_PATH`, which defaults to `./ledger.db`, the same file that holds live sandbox evidence. Each test run added about 120 rows of fake purchases.
+
+`tests/conftest.py` now points `LEDGER_PATH` at a throwaway temp directory before the app is imported, and `tests/test_isolation.py` asserts it.
+
+**If you ran the tests from `backend/` with a live ledger in place, that `ledger.db` contains test runs mixed with real evidence.** The ledger is append-only, so they can't be removed in place. Either keep the file and note it here (lineages from test runs are visible in `GET /api/ledger`), or start a fresh ledger file for the next live run.
 
 ### Architectural Decision D-5: Geographic Delivery & Cross-Border Fulfillment Governance
 * **Context:** Channel3's discovery graph indexes major North American and global retailers (Best Buy, Newegg, B&H Photo, Adorama, etc.) denominated in USD. In autonomous commerce, unconstrained agents could easily order products from retailers that do not ship to the buyer's home country (e.g. Italy/EU vs US) or that trigger unexpected customs tariffs.

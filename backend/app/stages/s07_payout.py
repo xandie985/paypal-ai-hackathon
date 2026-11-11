@@ -9,12 +9,13 @@ Webhooks are verified, de-duplicated by event id, stored, and replayable, becaus
 sandbox events arrive late, twice, or not at all.
 """
 
+import threading
 from datetime import date
 from decimal import Decimal
 
 from ..core.errors import WebhookUnverified
 from ..core.gates import RECONCILED, VERIFIED, require
-from ..core.ledger import EvidenceLedger
+from ..core.ledger import EvidenceLedger, LedgerEntry
 from ..core.lineage import request_id
 from ..core.money import gross_to_net
 from ..integrations.paypal import PayPalGateway
@@ -70,24 +71,45 @@ def release_payout(
 
 
 class WebhookInbox:
+    """Verify, then de-duplicate by event id, then store. The ledger is the store, so a redelivery after a
+    restart is still caught and every accepted event can be replayed from the sealed record."""
+
     def __init__(self, ledger: EvidenceLedger, gateway: PayPalGateway):
         self.ledger, self.gateway = ledger, gateway
-        self.events: dict[str, dict] = {}
+        self._lock = threading.Lock()  # two deliveries of one event must not both pass the duplicate check
 
-    def receive(self, headers: dict, body: dict) -> dict:
-        if not self.gateway.verify_webhook(headers, body):
+    def _stored(self) -> dict[str, LedgerEntry]:
+        return {e.payload["event_id"]: e for e in self.ledger.entries(kind="webhook") if "event" in e.payload}
+
+    def receive(self, headers: dict, body: dict, raw: bytes | None = None) -> dict:
+        if not self.gateway.verify_webhook(headers, body, raw):
             raise WebhookUnverified("webhook signature verification failed", event_id=body.get("id"))
         eid = body["id"]
-        if eid in self.events:
-            return {"event_id": eid, "duplicate": True}
-        self.events[eid] = body
-        lid = body.get("resource", {}).get("custom_id") or body.get("resource", {}).get("detail", {}).get("reference") or "unlinked"
-        self.ledger.append(lid, STAGE, "webhook", {"event_id": eid, "event_type": body.get("event_type")})
+        resource = body.get("resource", {})
+        lid = resource.get("custom_id") or resource.get("detail", {}).get("reference") or "unlinked"
+        with self._lock:
+            if eid in self._stored():
+                return {"event_id": eid, "duplicate": True}
+            self.ledger.append(lid, STAGE, "webhook", {"event_id": eid, "event_type": body.get("event_type"), "event": body})
         return {"event_id": eid, "duplicate": False, "lineage_id": lid}
 
     def replay(self, event_id: str) -> dict:
         """Inspector: re-deliver a stored event to handlers without a new signature check."""
-        return self.events[event_id]
+        return self._stored()[event_id].payload["event"]
+
+    def listing(self) -> list[dict]:
+        """Accepted events, newest first, for the inspector."""
+        return [
+            {
+                "event_id": e.payload["event_id"],
+                "event_type": e.payload["event_type"],
+                "summary": e.payload["event"].get("summary"),
+                "lineage_id": e.lineage_id,
+                "received_at": e.created_at,
+                "seq": e.seq,
+            }
+            for e in sorted(self._stored().values(), key=lambda e: e.seq, reverse=True)
+        ]
 
 
 def nudge_overdue(gateway: PayPalGateway, ledger: EvidenceLedger, receivables: list[dict], today: date) -> list[dict]:

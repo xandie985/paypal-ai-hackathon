@@ -37,6 +37,10 @@ class Runtime:
     gateway: PayPalGateway
     products: ProductSource
     timeline: list[dict] = field(default_factory=list)
+    inbox: s07_payout.WebhookInbox = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.inbox = s07_payout.WebhookInbox(self.ledger, self.gateway)
 
     @classmethod
     def build(cls, settings: Settings, ledger_path: str | None = None) -> "Runtime":
@@ -296,10 +300,9 @@ def run_demo(rt: Runtime) -> dict:
         reconciled_token=clean["token"],
     )
     rt.log("7", "payout_released", net=str(po["split"]["net"]), fee=str(po["split"]["fee"]), batch=po["batch_header"]["sender_batch_id"])
-    inbox = s07_payout.WebhookInbox(rt.ledger, rt.gateway)
     evt = {"id": "WH-1", "event_type": "PAYMENT.CAPTURE.COMPLETED", "resource": {"custom_id": b_lid}}
-    first = inbox.receive({"PAYPAL-TRANSMISSION-SIG": "replay"}, evt)
-    again = inbox.receive({"PAYPAL-TRANSMISSION-SIG": "replay"}, evt)
+    first = rt.inbox.receive({"PAYPAL-TRANSMISSION-SIG": "replay"}, evt)
+    again = rt.inbox.receive({"PAYPAL-TRANSMISSION-SIG": "replay"}, evt)
     rt.log("7", "webhooks", first_is_duplicate=first["duplicate"], second_is_duplicate=again["duplicate"])
 
     # 8 DEFEND

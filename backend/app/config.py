@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     llm_model: str = "claude-opus-5-5"
     ledger_path: str = "./ledger.db"
     gate_secret: str = "dev-only-gate-secret-change-me"
+    # Browser origins allowed to call the API from another host (Vite dev servers). The deployed app serves the
+    # frontend from the same origin, so it needs none.
+    cors_origins: str = "http://localhost:5173,http://localhost:5174"
+    # Folder of the built frontend (frontend/dist). When set, the API serves it at "/" so one web service hosts both.
+    frontend_dist: str = ""
     # Deterministic replay of PayPal/Channel3/LLM so the demo never depends on sandbox uptime.
     replay_mode: bool = True
 

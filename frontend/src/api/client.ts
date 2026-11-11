@@ -121,6 +121,22 @@ export type StudioRow = {
   payout_net?: string
   dispute_win_odds?: number
   dispute_outcome?: string
+  supplier_trust?: number
+}
+/** Related tables of the PayPal sandbox account behind the Command Center's PayPal pages (GET /studio/paypal). */
+type PaypalRow = Record<string, string | number | boolean | null>
+export type PaypalTables = {
+  source: 'live' | 'replay' // live = read from the sandbox account now; replay = fixed fixture
+  asOf: string
+  customers: PaypalRow[]
+  invoices: PaypalRow[]
+  invoiceItems: PaypalRow[]
+  invoicePayments: PaypalRow[]
+  products: PaypalRow[]
+  plans: PaypalRow[]
+  transactions: PaypalRow[]
+  payouts: PaypalRow[]
+  balances: PaypalRow[]
 }
 export type RunEvent = { seq: number; stage: string; event: string; [k: string]: unknown }
 export type MandateInput = {
@@ -207,6 +223,15 @@ export class ApiError extends Error {
   }
 }
 
+export interface WebhookEvent {
+  event_id: string
+  event_type: string
+  summary: string | null
+  lineage_id: string
+  received_at: string
+  seq: number
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const r = await fetch(`/api${path}`, {
     method,
@@ -238,6 +263,20 @@ export const api = {
     if (history) q.set('history', 'true')
     return call<{ rows: StudioRow[]; kpis: Record<string, string | number> }>('GET', `/studio/rows${q.size ? `?${q}` : ''}`)
   },
+  studioPaypal: (fixture?: boolean, refresh?: boolean) => {
+    const q = new URLSearchParams()
+    if (fixture) q.set('fixture', 'true')
+    if (refresh) q.set('refresh', 'true')
+    return call<PaypalTables>('GET', `/studio/paypal${q.size ? `?${q}` : ''}`)
+  },
+  studioLineage: (lineage: string) => call<LineageView>('GET', `/studio/lineage/${encodeURIComponent(lineage)}`),
+  studioCalibrations: () => call<{ calibrations: Calibration[] }>('GET', '/studio/calibrations'),
+  runCalibration: (runId: string) => call<RunCalibration>('GET', `/runs/${runId}/calibration`),
+  webhooks: () => call<{ events: WebhookEvent[]; verification: 'live' | 'replay' }>('GET', '/webhooks'),
+  simulateWebhook: (body: { event_type?: string; lineage_id?: string; event_id?: string }) =>
+    call<{ event_id: string; duplicate: boolean; lineage_id?: string }>('POST', '/webhooks/simulate', body),
+  replayWebhook: (eventId: string) => call<Record<string, unknown>>('POST', `/webhooks/${encodeURIComponent(eventId)}/replay`),
+  aiConfig: () => call<{ configured: boolean; model: string }>('GET', '/ai/config'),
   demoRun: () => call<unknown>('POST', '/demo/run'),
   disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
   dispute: (id: string) => call<DisputeDetail>('GET', `/disputes/${id}`),
@@ -252,4 +291,28 @@ export const api = {
   simulateReturn: (id: string) => call<unknown>('POST', `/disputes/${id}/simulate-return`, {}),
   recordDelivery: (d: DeliveryInput) => call<{ verdict: string; problems: string[] }>('POST', '/deliveries', d),
   briefUrl: (id: string) => `/api/disputes/${id}/brief.pdf`,
+}
+
+export type FullLedgerEntry = LedgerEntry & { payload: Record<string, unknown>; payload_hash: string }
+export type LineageView = { source: 'run' | 'seeded'; lineage_id: string; chain_ok: boolean; first_bad_seq: number | null; entries: FullLedgerEntry[] }
+export type MandateJson = Record<string, unknown> & { version: number; auto_threshold: string; vendor_allowlist: string[] }
+export type MandateDiffRow = { field: string; before: unknown; after: unknown; removed?: string[]; added?: string[] }
+export type RunCalibration = {
+  changed: boolean
+  changes: string[]
+  trust: Record<string, number>
+  before: MandateJson
+  after: MandateJson | null
+  diff: MandateDiffRow[]
+}
+export type Calibration = {
+  created_at: string
+  from_lineage: string
+  to_lineage: string
+  changes: string[]
+  trust: Record<string, number>
+  before: MandateJson
+  after: MandateJson
+  diff: MandateDiffRow[]
+  parent_digest_linked: boolean
 }

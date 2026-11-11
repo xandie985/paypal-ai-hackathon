@@ -53,7 +53,7 @@ class Run:
     mandate_lineage: str = ""
     items: dict[str, Item] = field(default_factory=dict)
     events: list[dict] = field(default_factory=list)
-    subscribers: list[asyncio.Queue] = field(default_factory=list)
+    subscribers: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = field(default_factory=list)
     complete: bool = False
     ready: bool = False  # set once every need is governed; before that an early capture must not end the run
 
@@ -61,15 +61,19 @@ class Run:
         e = jsonable_encoder({"seq": len(self.events), "stage": stage, "event": event, **data})
         self.events.append(e)
         self.rt.log(stage, event, **data)
-        for q in self.subscribers:
-            q.put_nowait(e)
+        self._publish(e)
+
+    def _publish(self, item: dict | None) -> None:
+        # Steps run on worker threads (sync endpoints, live runs) while subscribers wait on the server's loop,
+        # and an asyncio.Queue may only be touched from its own loop.
+        for loop, q in list(self.subscribers):
+            loop.call_soon_threadsafe(q.put_nowait, item)
 
     def finish_if_done(self) -> None:
         if self.ready and not self.complete and self.items and all(i.status in TERMINAL for i in self.items.values()):
             self.complete = True
             self.emit("run", "complete")
-            for q in self.subscribers:
-                q.put_nowait(None)
+            self._publish(None)
 
     def item(self, lineage: str) -> Item:
         if lineage not in self.items:
@@ -113,6 +117,7 @@ class Run:
 
 
 RUNS: dict[str, Run] = {}
+MAX_RUNS = 50  # sessions live in memory; the oldest are dropped past this so a long-lived server cannot grow without bound
 
 
 # ---- steps -----------------------------------------------------------------
@@ -318,6 +323,8 @@ async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dic
     ledger_path = ":memory:" if settings.replay_mode else settings.ledger_path
     run = Run(uuid.uuid4().hex[:12], Runtime.build(settings, ledger_path), mandate or DEMO_MANDATE)
     RUNS[run.run_id] = run
+    while len(RUNS) > MAX_RUNS:
+        RUNS.pop(next(iter(RUNS)))  # dicts keep insertion order: this is the oldest
     step_delegate(run)
     for spec in needs or DEMO_NEEDS:
         method = spec.get("method", "direct")

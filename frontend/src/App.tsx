@@ -10,6 +10,7 @@ import { MandateForm } from './features/mandate/MandateForm'
 import { NegotiationArena } from './features/negotiation/NegotiationArena'
 import { SummaryStrip } from './features/summary/SummaryStrip'
 import { Timeline } from './features/timeline/Timeline'
+import { WebhookInspector } from './features/webhooks/WebhookInspector'
 
 // Studio's bundle loads only when the Command Center opens (doc 11, UI-0.4). UI-0.2 replaces this hash switch with the app shell.
 const CommandCenter = lazy(() => import('./studio/CommandCenter'))
@@ -27,7 +28,8 @@ function useHash() {
 export default function App() {
   const [mode, setMode] = useState<string>('…')
   const { run, events, error, busy, start, act } = useRunSession()
-  const studio = useHash() === '#/studio'
+  const hash = useHash()
+  const studio = hash === '#/studio' || hash.startsWith('#/studio/')
   useEffect(() => {
     api.health().then((h) => setMode(h.paypal_live ? 'live sandbox' : 'replay')).catch(() => setMode('backend offline'))
   }, [])
@@ -85,6 +87,7 @@ export default function App() {
               <Timeline events={events} />
             </>
           )}
+          <WebhookInspector live={mode === 'live sandbox'} />
           <DisputeDesk run={run} live={mode === 'live sandbox'} />
         </main>
       )}

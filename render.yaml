@@ -1,0 +1,42 @@
+# Render Blueprint: one Docker web service that serves the API and the built frontend.
+# Secrets are `sync: false`: Render asks for them in the dashboard, so none live in the repo.
+services:
+  - type: web
+    name: pactguard-ai
+    runtime: docker
+    # Starter does not spin down when idle (free does, with a ~50 s cold start in front of a judge).
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      # true = deterministic replay of PayPal, Channel3 and the LLM: the demo never depends on sandbox uptime.
+      # Set false (and fill the PayPal and Channel3 keys) to run the live sandbox loop.
+      - key: REPLAY_MODE
+        value: "true"
+      - key: GATE_SECRET
+        generateValue: true
+      - key: LLM_MODEL
+        value: claude-haiku-5-5
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VITE_AG_STUDIO_LICENSE
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_VAULT_ID
+        sync: false
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: RETURN_ADDRESS_LINE_1
+        sync: false
+      - key: RETURN_ADDRESS_CITY
+        sync: false
+      - key: RETURN_ADDRESS_STATE
+        sync: false
+      - key: RETURN_ADDRESS_POSTAL_CODE
+        sync: false
