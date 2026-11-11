@@ -12,7 +12,7 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
-> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5). The Command Center grew from one flat table into a six-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 155 tests pass. Still open: the live PayPal read (only mock-tested), the Render deploy, APIMatic, and the backlog in §6.
+> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #6). The Command Center grew from one flat table into a six-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. Live PayPal Sandbox Transaction Search is now enabled and verified (`94` transactions, `2` balances, all `3` real sandbox captures matched). The remaining core-guarantee fixes, Agent-to-PayPal Reconciliation page, sandbox seeder, and interactive Stages 5–7 UI are specified in the 5-MR execution blueprint in **[doc 12 — Final Sprint Plan](12-final-sprint-plan.md)**.
 
 ---
 
@@ -475,6 +475,8 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 ---
 
 ## 6. Backlog: carried forward
+
+> **Actionable MR Blueprint:** All open backlog items and the 3 confirmed core-guarantee fixes have been decomposed into 5 sequential, agent-ready Merge Requests in **[doc 12 — Final Sprint Execution Plan](12-final-sprint-plan.md)**.
 
 Open items from later phases, kept here so they aren't lost while Phase 2 runs. Pick them up in Phase 3 or 4.
 
