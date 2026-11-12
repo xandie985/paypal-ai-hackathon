@@ -4,6 +4,8 @@
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
+> **Demo video (2:31):** [https://youtu.be/ZTwUr-tHtiE](https://youtu.be/ZTwUr-tHtiE): the whole loop against the PayPal sandbox, from mandate to dispute.
+>
 > **Live demo:** [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com). It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox. Licensed under [Apache-2.0](LICENSE).
 
 ## Try it (about two minutes)
