@@ -43,3 +43,15 @@ def test_seeded_history_has_mandate_diffs_linked_by_parent_digest():
     assert c["after"]["version"] == c["before"]["version"] + 1
     fields = {d["field"] for d in c["diff"]}
     assert fields & {"auto_threshold", "vendor_allowlist"}
+
+
+def test_ledger_checkpoint_and_verify_endpoint():
+    # Fetch signed head checkpoint
+    cp = client.get("/api/ledger/checkpoint").json()
+    assert "seq" in cp and "head_hash" in cp and "signature" in cp
+    # Verify with matching checkpoint params
+    v = client.get(
+        "/api/ledger/verify",
+        params={"checkpoint_seq": cp["seq"], "checkpoint_hash": cp["head_hash"], "signature": cp["signature"]},
+    ).json()
+    assert v["chain_ok"] is True and v["first_bad_seq"] is None

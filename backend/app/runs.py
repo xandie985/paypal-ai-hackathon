@@ -133,7 +133,7 @@ def step_delegate(run: Run) -> None:
     run.emit("1", "mandate_registered", lineage_id=run.mandate_lineage, digest=run.mandate.digest()[:16])
 
 
-async def step_discover_and_negotiate(run: Run, need: Need, method: str, sellers: list | None = None) -> Item:
+async def step_discover_and_negotiate(run: Run, need: Need, method: str, sellers: list | None = None, index: int | None = None) -> Item:
     rt, mlid = run.rt, run.mandate_lineage
     found = s02_discover.discover(rt.products, run.mandate, need)
     baseline = found["baseline_unit_price"]
@@ -148,7 +148,10 @@ async def step_discover_and_negotiate(run: Run, need: Need, method: str, sellers
         candidates=[{**c.model_dump(mode="json"), "allowlisted": c.merchant in run.mandate.vendor_allowlist} for c in found["candidates"]],
     )
     if method == "negotiate":
-        lid = txn_lineage(mlid, need.category, "bulk")
+        parts = [need.category, "bulk", need.description]
+        if index is not None:
+            parts.append(str(index))
+        lid = txn_lineage(mlid, *parts)
         neg = await s02_negotiate.negotiate(lid, run.mandate, need, sellers or demo_sellers(), baseline)
         w = neg.winner
         if w is None:
@@ -184,7 +187,10 @@ async def step_discover_and_negotiate(run: Run, need: Need, method: str, sellers
         if pick.return_days is not None
         else "Retail listing terms. Return window not disclosed by the merchant.",
     )
-    lid = txn_lineage(mlid, need.category, pick.product_id)
+    parts = [need.category, pick.product_id]
+    if index is not None:
+        parts.append(str(index))
+    lid = txn_lineage(mlid, *parts)
     return Item(lid, need, method, pick.title, offer, baseline, return_days=pick.return_days)
 
 
@@ -487,10 +493,10 @@ async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dic
     while len(RUNS) > MAX_RUNS:
         RUNS.pop(next(iter(RUNS)))  # dicts keep insertion order: this is the oldest
     step_delegate(run)
-    for spec in needs or DEMO_NEEDS:
+    for idx, spec in enumerate(needs or DEMO_NEEDS):
         method = spec.get("method", "direct")
         need = Need(**{k: v for k, v in spec.items() if k != "method"})
-        item = await step_discover_and_negotiate(run, need, method)
+        item = await step_discover_and_negotiate(run, need, method, index=idx)
         run.items[item.lineage_id] = item
         step_govern(run, item)
         # AUTO_SETTLE:

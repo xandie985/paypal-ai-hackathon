@@ -289,3 +289,34 @@ def test_capture_rechecks_budget_when_the_seal_hold_lapsed():
     assert res.status_code != 200 and "BUDGET_EXCEEDED" in res.text
     assert not run.rt.ledger.entries(mon["lineage_id"], "capture")
     assert any(e["event"] == "guard" and e.get("code") == "BUDGET_EXCEEDED" for e in run.events)
+
+
+@pytest.mark.asyncio
+async def test_multiple_negotiated_needs_in_same_category_do_not_collide():
+    from decimal import Decimal
+
+    from app.config import Settings
+    from app.domain.models import Mandate
+
+    settings = Settings(replay_mode=True)
+    mandate = Mandate(
+        principal="test@example.com",
+        purpose="Dual monitor procurement",
+        budget=Decimal("4000"),
+        auto_threshold=Decimal("300"),
+        per_txn_cap=Decimal("2000"),
+        vendor_allowlist=["Northwind Displays", "Contoso Retail", "Fabrikam Outlet"],
+        allowed_categories=["monitors"],
+        min_return_days=14,
+        mode="auto",
+    )
+    needs = [
+        {"description": "27in 4K monitor", "category": "monitors", "quantity": 1, "method": "negotiate"},
+        {"description": "34in ultrawide monitor", "category": "monitors", "quantity": 1, "method": "negotiate"},
+    ]
+    run = await runs.start_run(settings, mandate, needs)
+    assert len(run.items) == 2
+    lids = list(run.items.keys())
+    assert lids[0] != lids[1]
+    assert lids[0].startswith(run.mandate_lineage)
+    assert lids[1].startswith(run.mandate_lineage)

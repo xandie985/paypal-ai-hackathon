@@ -137,10 +137,10 @@ def _dispute(run: Run, item, rng: random.Random, clock: SeedClock) -> None:
 async def _one_mandate(rt: Runtime, i: int, rng: random.Random, clock: SeedClock) -> None:
     run = Run(f"seed{i:02d}-{uuid.UUID(int=rng.getrandbits(128)).hex[:6]}", rt, _mandate(rng, i))
     step_delegate(run)
-    for desc, cat, method, (lo, hi) in rng.sample(NEEDS, k=rng.randint(1, 3)):
+    for idx, (desc, cat, method, (lo, hi)) in enumerate(rng.sample(NEEDS, k=rng.randint(1, 3))):
         need = Need(description=desc, category=cat, quantity=rng.randint(lo, hi))
         try:
-            item = await step_discover_and_negotiate(run, need, method, sellers=_sellers(rng))
+            item = await step_discover_and_negotiate(run, need, method, sellers=_sellers(rng), index=idx)
         except ValueError:
             continue  # no allowlisted seller survived: nothing to buy, as in a live run
         run.items[item.lineage_id] = item

@@ -44,7 +44,12 @@ class Runtime:
 
     @classmethod
     def build(cls, settings: Settings, ledger_path: str | None = None) -> "Runtime":
-        return cls(settings, open_ledger(ledger_path or settings.ledger_path), make_gateway(settings), make_product_source(settings))
+        return cls(
+            settings,
+            open_ledger(ledger_path or settings.ledger_path, secret=settings.gate_secret),
+            make_gateway(settings),
+            make_product_source(settings),
+        )
 
     def log(self, stage: str, event: str, **data) -> None:
         self.timeline.append({"stage": stage, "event": event, **data})
