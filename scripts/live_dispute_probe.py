@@ -6,7 +6,7 @@ SandboxPayPal.dispute_action). Dry run unless --send; sending asks you to type t
     backend/.venv/bin/python scripts/live_dispute_probe.py offer PP-R-XXX-12345678 10.00 --send   # really send
 
 A partial refund is a money-only REFUND offer below the disputed amount. The probe is a test of PayPal's
-API, not an agent decision: it writes nothing to the evidence ledger. Note what you sent in doc 09.
+API, not an agent decision: it writes nothing to the evidence ledger. Record what you sent in your own notes.
 """
 
 import json

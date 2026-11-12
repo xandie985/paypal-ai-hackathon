@@ -4,7 +4,17 @@
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-> **Live demo:** [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com). It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox.
+> **Live demo:** [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com). It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox. Licensed under [Apache-2.0](LICENSE).
+
+## Try it (about two minutes)
+
+No credentials are needed.
+
+1. Open the live demo and press **Run agent**. Choose what to buy and how many in the "What to buy" list first if you like. The webcams settle automatically; the monitors and the microphone wait for you.
+2. Press **Approve** on the monitor card, then pay it, then **Run post-purchase checks** on a settled purchase: delivery verified, invoice reconciled, a spoofed resubmission flagged, a payout refused, then released.
+3. Press **Simulate prompt-injection attack** to watch the firewall block it, and read the evidence ledger ("chain verified").
+4. Open **Command Center** for the seven-page AG Studio report. Run another agent in a second tab and watch the Live feed add it.
+5. **Run 10-Stage Showcase** in the header runs the whole loop in about a second.
 
 ## The loop
 
@@ -69,7 +79,7 @@ A replay deployment can still offer one real run. Set `ALLOW_SANDBOX_RUNS=true` 
 | Tool | What we did with it |
 |---|---|
 | **PayPal** | REST APIs called directly: Orders v2 (create, capture, vault), Invoicing v2 (draft-first, then send), Payouts v1, Disputes (read, offer, message, evidence), and Webhooks (raw-body verification). We do not use `@paypal/agent-toolkit`: it has no spend cap, no idempotency discipline and no payout tool, which are the gaps the firewall, lineage-derived request IDs and gate tokens close. |
-| **AG Grid / AG Studio** | The Command Center is a seven-page AG Studio report grouped under **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`): spend, savings by vendor, firewall routes and latency, human escalations, dispute outcomes beside supplier trust, and PayPal account reporting joined to agent captures via `capture_id`. Clicking a row opens its sealed lineage or PayPal detail drawer. A **Live** feed applies new and changed purchases to Studio as data transactions (pause it, or set 2, 5 or 10 seconds), so a run you approve in Mission Control appears without reloading. It covers the purchase pages; the PayPal pages update on Refresh. A mandate v1 → v2 diff sits beside it. The Studio assistant runs on **Claude 3.5 Sonnet** through an adapter we wrote for Studio's `AgLlmAdapter` contract, with the key held server-side. |
+| **AG Grid / AG Studio** | The Command Center is a seven-page AG Studio report grouped under **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`): spend, savings by vendor, firewall routes and latency, human escalations, dispute outcomes beside supplier trust, and PayPal account reporting joined to agent captures via `capture_id`. Clicking a row opens its sealed lineage or PayPal detail drawer. A **Live** feed applies new and changed purchases to Studio as data transactions (pause it, or set 2, 5 or 10 seconds), so a run you approve in Mission Control appears without reloading. It covers the purchase pages; the PayPal pages update on Refresh. A mandate v1 → v2 diff sits beside it. The Studio assistant runs on **Claude Haiku 5.5** through an adapter we wrote for Studio's `AgLlmAdapter` contract, with the key held server-side. |
 | **Channel3** | Live product search for the retail baseline and candidate sellers. |
 | **Render** | One Docker web service deployed from `render.yaml` at [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com) serving the FastAPI backend and built React frontend together. |
 | **APIMatic** | Used after the fact, as an independent check, not while writing the code. We ran our real Orders v2 create-order payloads (two purchase units and the saved-wallet payment source) through the models of APIMatic's generated [`paypal-server-sdk`](https://pypi.org/project/paypal-server-sdk/) 2.4.0: nothing we send is unknown to the SDK or altered by it, the required fields are present, and an injected misspelt field is caught. Our Transaction Search query parameters also match the SDK's. That SDK has no Invoicing, Payouts or Disputes models, so those payloads were **not** validated this way. Re-run it with [`backend/scripts/apimatic_check.py`](backend/scripts/apimatic_check.py). We also installed APIMatic's PayPal Context Plugin on 2026-11-12, after the integration code was written, so it did not guide that code. |
@@ -89,18 +99,21 @@ backend/
   eval/         the three evaluations
 ```
 
-## Architecture & Implementation Documentation
+## Documentation
 
-Detailed architecture specifications, execution plans, and UI designs are documented in [`docs/`](docs/):
-- [`09 · Implementation Framework`](docs/09-implementation-framework.md): Maps every procurement stage, deterministic firewall rule, lineage digest, and hand-off guard to code and unit tests.
-- [`10 · Execution Plan`](docs/10-execution-plan.md): Phased engineering roadmap, integration milestones, and validation checklist.
-- [`11 · Dashboard UI Plan`](docs/11-dashboard-ui-plan.md): Mission Control & Command Center UI layout, AG Studio integration, and operator workflows.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the loop, the shared primitives (ledger, lineage, request IDs, gate tokens, money), the hand-off guard table with the test behind each guard, the API map and security notes.
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md): modes, every environment variable, local development, Render deployment, real webhooks, the sandbox run button, how to verify a deployment, and known quirks.
 
 ## Credits
 
 The Command Center's PayPal pages (Revenue, Receivables, Cash, Catalogue), their data sources and the PayPal account tables behind them are adapted from the PayPal AI Hackathon's AG Grid boilerplate, [paypaldev/hackathon-paypal-ag-grid-boilerplate](https://github.com/paypaldev/hackathon-paypal-ag-grid-boilerplate) (`lib/paypal.ts`, `lib/dashboard-data.ts`, `app/dashboard/studio/`). The boilerplate is ported to Python and React here, and its repository carries no licence file, so we use it as the hackathon's provided starting point.
 
 ## Known Limitations
+
+- **Simulated parts:** sellers in negotiation are deterministic policies, not merchants; the carrier report and vendor invoices in the post-purchase sequence are scripted; the payout stays scripted in a sandbox run.
+- **Not yet verified live:** webhook handling against a real PayPal event, and the multipart dispute-evidence upload against a live case. Both are unit-tested against the replay gateway.
+- **Live feed:** it adds and updates purchases in the Studio tables only; the PayPal pages update on Refresh. The rows endpoint returns the latest run, so an earlier run's rows stay until you reload.
+- **Studio console message:** with AG Studio 3.1.0, switching onto Revenue or Receivables logs one harmless message (see [`docs/OPERATIONS.md`](docs/OPERATIONS.md)).
 
 - **Held-out prompt injection paraphrasing:** The prompt-injection firewall currently relies on regex tripwires. While it catches 100% of direct phrasings and known evasion attacks with sub-millisecond deterministic latency, novel paraphrases can evade regex detection. Because untrusted text can only escalate to a human or block (it can never force an auto-settle), this cannot cause an unauthorized spend, but an escalate-only structured LLM classifier is planned to close the paraphrase gap.
 - **Budget holds on sealed orders:** an order that is sealed but not yet captured counts against the mandate budget, so two approvals cannot overspend it. If a buyer closes the PayPal popup, that hold expires after 30 minutes (`SEAL_HOLD`); until then it can block a later purchase in the same run. Capture re-checks the budget, so an order whose hold lapsed cannot be captured over budget. A captured order is spend for good.

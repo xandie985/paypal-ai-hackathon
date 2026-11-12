@@ -14,7 +14,7 @@ import { Timeline } from './features/timeline/Timeline'
 import { WebhookInspector } from './features/webhooks/WebhookInspector'
 import { money } from './lib/format'
 
-// Studio's bundle loads only when the Command Center opens (doc 11, UI-0.4).
+// Studio's bundle loads only when the Command Center opens (it is a large bundle).
 const CommandCenter = lazy(() => import('./studio/CommandCenter'))
 
 function useHash() {
