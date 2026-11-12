@@ -1,5 +1,5 @@
 """Guard violations. Each maps to a row of the hand-off failure table in
-docs/09-implementation-framework.md, so a failing guard names the hand-off it protects."""
+docs/ARCHITECTURE.md, so a failing guard names the hand-off it protects."""
 
 
 class GuardViolation(Exception):

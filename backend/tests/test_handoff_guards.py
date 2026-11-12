@@ -1,4 +1,4 @@
-"""One test per row of the hand-off failure table (docs/09-implementation-framework.md)."""
+"""One test per row of the hand-off failure table (docs/ARCHITECTURE.md)."""
 
 import asyncio
 from decimal import Decimal

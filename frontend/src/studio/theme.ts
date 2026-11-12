@@ -1,6 +1,6 @@
 import { studioTheme } from 'ag-studio'
 
-// Each param reads a --pg-* token (doc 11 §4.2) and falls back to that token's hex until UI-0.1 defines them.
+// Each param reads a --pg-* CSS token and falls back to that token's hex.
 const v = (name: string, fallback: string) => `var(--pg-${name}, ${fallback})`
 const font = 'Inter, ui-sans-serif, system-ui, sans-serif'
 

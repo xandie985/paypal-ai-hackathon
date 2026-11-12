@@ -64,13 +64,3 @@ checkpoint*.md
 temp_checkpt*.md
 test.html
 
-# Local research and ideation drafts (kept locally, omitted from GitHub)
-docs/01-problem-decomposition.md
-docs/02-literature-and-technical-landscape.md
-docs/03-user-pain-points-and-signals.md
-docs/04-competitor-and-prior-art.md
-docs/05-feature-ideation.md
-docs/06-idea-ranking.md
-docs/07-top-3-recommendations.md
-docs/08-final-recommendation-and-roadmap.md
-docs/full-research-dossier.md

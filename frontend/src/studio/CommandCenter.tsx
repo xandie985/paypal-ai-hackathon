@@ -22,7 +22,7 @@ import { pactguardTheme } from './theme'
 
 if (import.meta.env.DEV) enableStudioDevValidations()
 
-// The licence key ships in the browser bundle by design (doc 11 §6.2). Unset = local watermark mode.
+// The licence key ships in the browser bundle by design. Unset = local watermark mode.
 const licenseKey = import.meta.env.VITE_AG_STUDIO_LICENSE || undefined
 const modules = [AgStudioAiModule]
 
