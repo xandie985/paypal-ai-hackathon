@@ -104,15 +104,20 @@ _DAYS_PER_INTERVAL = {"DAY": 1, "WEEK": 7, "MONTH": 365 / 12, "YEAR": 365}
 _EVENT_TYPES = {
     "T0000": "Payment",
     "T0001": "Payout",
+    "T0003": "Pre-approved payment",  # a vaulted (saved-wallet) capture, which is how the agent auto-settles
     "T0006": "Purchase capture",
     "T0007": "Website payment",
     "T0013": "Donation",
     "T0400": "Bank withdrawal",
+    "T0200": "Currency conversion",
     "T0700": "Currency conversion",
     "T1105": "Hold released",
     "T1107": "Payment refund",
+    "T1110": "Dispute hold",
+    "T1111": "Dispute hold released",
     "T1201": "Chargeback",
     "T1503": "Payout hold",
+    "T1900": "General adjustment",
 }
 _TXN_STATUSES = {"S": "Success", "P": "Pending", "D": "Denied", "V": "Reversed", "F": "Partially refunded"}
 
