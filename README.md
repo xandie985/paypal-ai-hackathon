@@ -6,7 +6,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 > **Demo video (2:31):** [https://youtu.be/ZTwUr-tHtiE](https://youtu.be/ZTwUr-tHtiE): the whole loop against the PayPal sandbox, from mandate to dispute.
 >
-> **Live demo:** [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com). It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox. Licensed under [Apache-2.0](LICENSE).
+> **Live demo:** [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com). It opens in replay mode, so it never depends on sandbox uptime. Where the deployment enables it, a **Run in PayPal sandbox** button runs the same flow against our real PayPal sandbox with test money, capped in size and rate-limited (see below). Licensed under [Apache-2.0](LICENSE).
 
 ## Try it (about two minutes)
 
@@ -18,6 +18,7 @@ No credentials are needed.
 4. Open **Command Center** for the seven-page AG Studio report. Run another agent in a second tab and watch the Live feed add it.
 5. **Run 10-Stage Showcase** in the header runs the whole loop in about a second.
 6. In the **Dispute desk** (further down), pick a scenario such as "Stopped working", simulate it on a settled purchase, and open the case: read the facts and options, send a refund on return, simulate the buyer shipping it, record the inspection, and confirm the refund. On a live sandbox the same desk reads disputes the buyer opens in PayPal's Resolution Center.
+7. If the **Run in PayPal sandbox** card appears under the mandate, press it and confirm: the run creates real orders and captures in our PayPal sandbox (test money, charged to a saved wallet), with held purchases paid from the same wallet after you approve them. It is limited to a few runs an hour per visitor.
 
 ## The loop
 
