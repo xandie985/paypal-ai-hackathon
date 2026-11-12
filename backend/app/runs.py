@@ -60,6 +60,8 @@ class Run:
     complete: bool = False
     ready: bool = False  # set once every need is governed; before that an early capture must not end the run
     forensics: s06_reconcile.InvoiceForensics | None = None  # duplicate memory across this run's invoices
+    sandbox: bool = False  # real PayPal sandbox orders, paid from the saved wallet, in an otherwise replay deployment
+    payment_source: dict | None = None  # the saved wallet every order of a sandbox run is charged to
 
     def emit(self, stage: str, event: str, **data) -> None:
         e = jsonable_encoder({"seq": len(self.events), "stage": stage, "event": event, **data})
@@ -91,6 +93,7 @@ class Run:
                 "mandate_lineage": self.mandate_lineage,
                 "mandate": self.mandate,
                 "complete": self.complete,
+                "sandbox": self.sandbox,
                 "items": [
                     {
                         "lineage_id": i.lineage_id,
@@ -243,6 +246,7 @@ def step_prepare_order(run: Run, lineage: str, payment_source: dict | None = Non
     if item.prep:
         return item.prep
     committed = run.rt.committed_spend(run.mandate_lineage, exclude_lineage_id=lineage)
+    payment_source = payment_source or run.payment_source
     try:
         item.prep = s04_settle.prepare_order(
             run.rt.ledger,
@@ -484,11 +488,18 @@ def step_attack(run: Run) -> Decision:
 # ---- lifecycle -------------------------------------------------------------
 
 
-async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dict] | None) -> Run:
+async def start_run(settings: Settings, mandate: Mandate | None, needs: list[dict] | None, sandbox: bool = False) -> Run:
+    if sandbox:
+        # Only this run goes live: the rest of the deployment stays in replay.
+        settings = settings.model_copy(update={"replay_mode": False})
+        if not (settings.paypal_live and settings.paypal_vault_id):
+            raise ValueError("sandbox runs need PayPal sandbox credentials and a saved wallet")
     # Live runs persist their evidence: a dispute can arrive weeks later, after any restart, and stage 8
     # must still find the seal. Replay runs stay in memory so rehearsals don't pile up in the file.
     ledger_path = ":memory:" if settings.replay_mode else settings.ledger_path
     run = Run(uuid.uuid4().hex[:12], Runtime.build(settings, ledger_path), mandate or DEMO_MANDATE)
+    if sandbox:
+        run.sandbox, run.payment_source = True, {"paypal": {"vault_id": settings.paypal_vault_id}}
     RUNS[run.run_id] = run
     while len(RUNS) > MAX_RUNS:
         RUNS.pop(next(iter(RUNS)))  # dicts keep insertion order: this is the oldest

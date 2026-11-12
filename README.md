@@ -35,6 +35,10 @@ To use the live sandbox, set `REPLAY_MODE=false` and fill in the PayPal and Chan
 
 [`render.yaml`](render.yaml) and the [`Dockerfile`](Dockerfile) define one web service that serves the API and the built frontend from a single process. It runs a single worker, because run sessions live in process memory. Create it from the Blueprint, fill in the secrets Render asks for, and keep `REPLAY_MODE=true` for the public URL. The filesystem is ephemeral, so the ledger resets on restart and the seeded history is rebuilt on demand. To receive real PayPal webhooks, register `https://<your-service>/api/webhooks/paypal` as a webhook in the sandbox app and set `PAYPAL_WEBHOOK_ID`.
 
+### Sandbox run button
+
+A replay deployment can still offer one real run. Set `ALLOW_SANDBOX_RUNS=true` together with `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_VAULT_ID`, and Mission Control shows **Run in PayPal sandbox** under the mandate (with a confirmation). That run alone uses the real sandbox: orders and captures are created in the project's PayPal sandbox and charged to the saved wallet, and held purchases are paid from the same wallet once approved, with no popup. The rest of the deployment stays in replay. It is off by default, a run's budget is capped (`SANDBOX_RUN_BUDGET_CAP`, 2500 USD), and runs are limited to 3 an hour per visitor and `SANDBOX_RUNS_PER_HOUR` overall. Test money only, but it is your sandbox: leave it off on a public deployment unless you want visitors spending it. The payout step stays scripted in a sandbox run.
+
 ## What is live and what is simulated
 
 | Stage | State |

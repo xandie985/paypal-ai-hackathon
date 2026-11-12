@@ -11,7 +11,8 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import runs
+from . import runs, sandbox_gate
+from .ai_proxy import _client_id
 from .config import settings
 from .core.errors import GuardViolation, WebhookUnverified
 from .core.ledger import EvidenceLedger, open_ledger
@@ -135,6 +136,7 @@ def history_verify():
 class StartRun(BaseModel):
     mandate: Mandate | None = None
     needs: list[dict] | None = None
+    sandbox: bool = False  # real PayPal sandbox orders instead of replay; see sandbox_gate
 
 
 class Approver(BaseModel):
@@ -164,12 +166,20 @@ def _guarded(fn, *args):
 
 
 @router.post("/runs")
-async def start_run(body: StartRun | None = None):
+async def start_run(request: Request, body: StartRun | None = None):
     body = body or StartRun()
+    if body.sandbox:
+        if not settings.sandbox_runs_available:
+            raise HTTPException(403, "sandbox runs are not enabled on this server")
+        mandate = body.mandate or runs.DEMO_MANDATE
+        if float(mandate.budget) > settings.sandbox_run_budget_cap:
+            raise HTTPException(422, f"a sandbox run's budget is capped at ${settings.sandbox_run_budget_cap:,.0f}")
+        if not sandbox_gate.allow(_client_id(request), settings.sandbox_runs_per_hour):
+            raise HTTPException(429, "sandbox run limit reached; try again later or use the replay run")
     try:
         # A live run makes blocking HTTP calls (Channel3, PayPal) for seconds. Running it on a worker thread with
         # its own loop keeps health checks, SSE keepalives and other requests responsive meanwhile.
-        run = await run_in_threadpool(lambda: asyncio.run(runs.start_run(settings, body.mandate, body.needs)))
+        run = await run_in_threadpool(lambda: asyncio.run(runs.start_run(settings, body.mandate, body.needs, sandbox=body.sandbox)))
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return run.snapshot()

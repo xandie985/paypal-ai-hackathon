@@ -57,6 +57,7 @@ export type Item = {
 }
 export type RunSnapshot = {
   run_id: string
+  sandbox?: boolean // real PayPal sandbox orders, paid from the saved wallet
   mandate_lineage: string
   complete: boolean
   items: Item[]
@@ -284,8 +285,9 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 const base = (id: string) => `/runs/${id}`
 
 export const api = {
-  health: () => call<{ replay_mode: boolean; paypal_live: boolean; paypal_client_id?: string | null; currency?: string }>('GET', '/health'),
-  startRun: (mandate?: MandateInput) => call<RunSnapshot>('POST', '/runs', mandate ? { mandate } : {}),
+  health: () => call<{ replay_mode: boolean; paypal_live: boolean; sandbox_run_available?: boolean; paypal_client_id?: string | null; currency?: string }>('GET', '/health'),
+  startRun: (mandate?: MandateInput, sandbox = false) =>
+    call<RunSnapshot>('POST', '/runs', { ...(mandate ? { mandate } : {}), ...(sandbox ? { sandbox: true } : {}) }),
   getRun: (id: string) => call<RunSnapshot>('GET', base(id)),
   approve: (id: string, lid: string) => call<RunSnapshot>('POST', `${base(id)}/decisions/${lid}/approve`, {}),
   reject: (id: string, lid: string) => call<RunSnapshot>('POST', `${base(id)}/decisions/${lid}/reject`, {}),

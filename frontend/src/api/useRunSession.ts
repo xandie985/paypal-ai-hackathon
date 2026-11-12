@@ -36,10 +36,10 @@ export function useRunSession() {
 
   const refresh = useCallback(async (id: string) => setRun(await api.getRun(id)), [])
 
-  const start = (mandate?: MandateInput) =>
+  const start = (mandate?: MandateInput, sandbox = false) =>
     guard(async () => {
       setEvents([])
-      setRun(await api.startRun(mandate))
+      setRun(await api.startRun(mandate, sandbox))
     })
 
   const act = (fn: (id: string) => Promise<unknown>) =>

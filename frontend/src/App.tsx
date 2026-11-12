@@ -38,6 +38,7 @@ const STAGES = [
 
 export default function App() {
   const [mode, setMode] = useState<string>('…')
+  const [sandboxAvailable, setSandboxAvailable] = useState(false)
   const [currentMandate, setCurrentMandate] = useState<MandateInput>(DEFAULTS)
   const [runMandate, setRunMandate] = useState<MandateInput | null>(null) // what the shown run was started with
   const [demoResult, setDemoResult] = useState<DemoRunResult | null>(null)
@@ -50,7 +51,10 @@ export default function App() {
   useEffect(() => {
     api
       .health()
-      .then((h) => setMode(h.paypal_live ? 'live sandbox' : 'replay'))
+      .then((h) => {
+        setMode(h.paypal_live ? 'live sandbox' : 'replay')
+        setSandboxAvailable(!!h.sandbox_run_available)
+      })
       .catch(() => setMode('backend offline'))
   }, [])
 
@@ -250,9 +254,10 @@ export default function App() {
             <aside className="lg:sticky lg:top-20 space-y-4">
               <MandateForm
                 busy={busy}
-                onStart={(m) => {
+                sandboxAvailable={sandboxAvailable}
+                onStart={(m, sandbox) => {
                   setRunMandate(m)
-                  start(m)
+                  start(m, sandbox)
                 }}
                 onMandateChange={setCurrentMandate}
               />
@@ -312,8 +317,13 @@ export default function App() {
 
               {/* Hero Banner */}
               <div className="v1-hero">
-                <div className="text-[11px] font-extrabold uppercase tracking-widest text-sky-200">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-sky-200">
                   Mandate-bound procurement
+                  {run?.sandbox && (
+                    <span className="rounded-full bg-amber-300 px-2 py-0.5 tracking-wide text-amber-950 normal-case">
+                      PayPal sandbox run · real orders, test money
+                    </span>
+                  )}
                 </div>
                 <h3 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">
                   Give the agent a budget. Keep the final say.
@@ -494,6 +504,7 @@ export default function App() {
                       key={i.lineage_id}
                       item={i}
                       runId={run.run_id}
+                      sandbox={run.sandbox}
                       busy={busy}
                       onApprove={() => act((id) => api.approve(id, i.lineage_id))}
                       onReject={() => act((id) => api.reject(id, i.lineage_id))}

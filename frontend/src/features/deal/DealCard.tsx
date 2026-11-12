@@ -22,7 +22,7 @@ const Stat = ({ k, v, sub }: { k: string; v: string; sub?: string }) => (
   </div>
 )
 
-export function DealCard({ item, runId, busy, onApprove, onReject, onPay, onRefresh }: { item: Item; runId: string; busy: boolean; onApprove: () => void; onReject: () => void; onPay: () => void; onRefresh: () => void }) {
+export function DealCard({ item, runId, sandbox = false, busy, onApprove, onReject, onPay, onRefresh }: { item: Item; runId: string; sandbox?: boolean; busy: boolean; onApprove: () => void; onReject: () => void; onPay: () => void; onRefresh: () => void }) {
   const [open, setOpen] = useState(false)
   const o = item.offer
   const savePct = item.baseline ? ((Number(item.baseline) - Number(o.unit_price)) / Number(item.baseline)) * 100 : null
@@ -48,7 +48,7 @@ export function DealCard({ item, runId, busy, onApprove, onReject, onPay, onRefr
       {o.terms && <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">Seller terms: {o.terms}</p>}
       <RouteCard item={item} busy={busy} onApprove={onApprove} onReject={onReject} />
       <div className="flex flex-wrap items-center gap-3">
-        <PayPalApprove item={item} runId={runId} busy={busy} onPay={onPay} onSettled={onRefresh} />
+        <PayPalApprove item={item} runId={runId} sandbox={sandbox} busy={busy} onPay={onPay} onSettled={onRefresh} />
         <RetryButton runId={runId} item={item} />
         {item.seal && (
           <button className="text-xs text-indigo-700 hover:underline" onClick={() => setOpen(!open)}>
