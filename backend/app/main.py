@@ -29,6 +29,7 @@ def health():
         "status": "ok",
         "replay_mode": settings.replay_mode,
         "paypal_live": settings.paypal_live,
+        "sandbox_run_available": settings.sandbox_runs_available,
         # Public by design: the JS SDK loads with it in the browser. The secret never leaves the server.
         "paypal_client_id": settings.paypal_client_id if settings.paypal_live else None,
         "currency": "USD",

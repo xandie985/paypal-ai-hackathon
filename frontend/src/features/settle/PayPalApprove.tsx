@@ -30,12 +30,14 @@ const describe = (e: unknown) => (e instanceof ApiError ? e.message : e instance
 export function PayPalApprove({
   item,
   runId,
+  sandbox = false,
   busy,
   onPay,
   onSettled,
 }: {
   item: Item
   runId: string
+  sandbox?: boolean // a sandbox run pays from the saved wallet: real orders, no popup
   busy: boolean
   onPay: () => void
   onSettled: () => void
@@ -46,16 +48,16 @@ export function PayPalApprove({
   if (item.status === 'settled')
     return (
       <p className="text-xs text-emerald-800">
-        Settled{cfg?.live ? ' in PayPal sandbox' : ' (replay)'} · order <b className="font-mono">{item.order_id}</b> · capture{' '}
+        Settled{cfg?.live || sandbox ? ' in PayPal sandbox' : ' (replay)'} · order <b className="font-mono">{item.order_id}</b> · capture{' '}
         <b className="font-mono">{item.capture_id}</b>
       </p>
     )
   if (item.status !== 'authorized' || !cfg) return null
 
-  if (!cfg.live || !cfg.clientId)
+  if (sandbox || !cfg.live || !cfg.clientId)
     return (
       <button disabled={busy} onClick={onPay} className="rounded bg-sky-700 px-3 py-1 text-sm font-semibold text-white disabled:opacity-50">
-        Pay with PayPal (replay)
+        {sandbox ? 'Pay from saved wallet (PayPal sandbox)' : 'Pay with PayPal (replay)'}
       </button>
     )
 

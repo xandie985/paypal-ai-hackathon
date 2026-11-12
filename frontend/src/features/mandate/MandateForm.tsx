@@ -12,12 +12,15 @@ export function MandateForm({
   busy,
   onStart,
   onMandateChange,
+  sandboxAvailable = false,
 }: {
   busy: boolean
-  onStart: (m: MandateInput) => void
+  onStart: (m: MandateInput, sandbox?: boolean) => void
+  sandboxAvailable?: boolean
   onMandateChange?: (m: MandateInput) => void
 }) {
   const [m, setM] = useState<MandateInput>(DEFAULTS)
+  const [confirmSandbox, setConfirmSandbox] = useState(false)
   const [activePreset, setActivePreset] = useState<'office' | 'strict' | null>('office')
   // The two list fields keep what was typed: rebuilding the text from the parsed list would swallow each comma as it is typed.
   const [vendorText, setVendorText] = useState(DEFAULTS.vendor_allowlist.join(', '))
@@ -247,6 +250,48 @@ export function MandateForm({
           </span>
         )}
       </button>
+
+      {sandboxAvailable && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          {!confirmSandbox ? (
+            <button
+              type="button"
+              disabled={busy || errs.length > 0}
+              onClick={() => setConfirmSandbox(true)}
+              className="w-full rounded-lg border border-amber-300 bg-white py-2 text-sm font-bold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              Run in PayPal sandbox
+            </button>
+          ) : (
+            <>
+              <p className="text-xs text-amber-900">
+                This creates <b>real orders in our PayPal sandbox</b> and charges its saved wallet (test money). Held purchases are paid
+                from the same wallet once you approve them. Limited to a few runs per hour.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busy || errs.length > 0}
+                  onClick={() => {
+                    setConfirmSandbox(false)
+                    onStart(m, true)
+                  }}
+                  className="rounded-lg bg-amber-600 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  Confirm sandbox run
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmSandbox(false)}
+                  className="rounded-lg border border-amber-300 bg-white py-2 text-xs font-bold text-amber-900 hover:bg-amber-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <p className="text-center text-xs text-slate-400">
         Deterministic spend firewall. Untrusted LLMs cannot authorize or disburse payouts.

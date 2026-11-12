@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     frontend_dist: str = ""
     # Deterministic replay of PayPal/Channel3/LLM so the demo never depends on sandbox uptime.
     replay_mode: bool = True
+    # A "sandbox run" is a per-run opt-in to the real PayPal sandbox from an otherwise replay deployment. Off unless set.
+    allow_sandbox_runs: bool = False
+    sandbox_run_budget_cap: float = 2500  # largest mandate budget a sandbox run accepts, in USD
+    sandbox_runs_per_hour: int = 12  # across all clients
 
     # Where a buyer ships a returned item (make-offer REFUND_WITH_RETURN). PayPal shows it to the buyer,
     # so it must be your real returns address in live mode.
@@ -61,6 +65,10 @@ class Settings(BaseSettings):
     @property
     def paypal_live(self) -> bool:
         return not self.replay_mode and bool(self.paypal_client_id and self.paypal_client_secret)
+
+    @property
+    def sandbox_runs_available(self) -> bool:
+        return self.allow_sandbox_runs and bool(self.paypal_client_id and self.paypal_client_secret and self.paypal_vault_id)
 
     @model_validator(mode="after")
     def _validate_gate_secret(self) -> "Settings":
