@@ -4,7 +4,7 @@ buy -> seal -> deliver -> reconcile -> pay out -> dispute -> defend -> dashboard
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from .config import Settings
@@ -52,6 +52,33 @@ class Runtime:
     def spent(self, mandate_lid: str) -> Decimal:
         return sum((Decimal(e.payload["amount"]["value"]) for e in self.ledger.entries(mandate_lid, "capture")), Decimal("0"))
 
+    def committed_spend(self, mandate_lid: str, exclude_lineage_id: str | None = None, now: datetime | None = None) -> Decimal:
+        """Spend already captured, plus orders sealed but not yet captured. A seal PayPal never got approved (the buyer
+        closed the popup) stops holding budget after SEAL_HOLD, so an abandoned order cannot lock a mandate for good."""
+        now = now or datetime.now(UTC)
+        prefix = f"{mandate_lid}."
+        by_lid: dict[str, Decimal] = {}
+        for e in self.ledger.entries(mandate_lid):
+            if exclude_lineage_id and e.lineage_id == exclude_lineage_id:
+                continue
+            if e.lineage_id != mandate_lid and not e.lineage_id.startswith(prefix):
+                continue
+            if e.kind == "seal":
+                if now - datetime.fromisoformat(e.created_at) > SEAL_HOLD:
+                    continue
+                val = e.payload["amount"]["value"] if isinstance(e.payload.get("amount"), dict) else e.payload.get("amount")
+                if val is not None:
+                    by_lid[e.lineage_id] = Decimal(str(val))
+            elif e.kind == "capture":
+                val = e.payload["amount"]["value"] if isinstance(e.payload.get("amount"), dict) else e.payload.get("amount")
+                if val is not None:
+                    by_lid[e.lineage_id] = Decimal(str(val))
+            elif e.kind in ("capture_failed", "rejection"):
+                by_lid.pop(e.lineage_id, None)
+        return sum(by_lid.values(), Decimal("0"))
+
+
+SEAL_HOLD = timedelta(minutes=30)  # how long an uncaptured sealed order holds mandate budget
 
 DEMO_MANDATE = Mandate(
     principal="ops@acme.example",

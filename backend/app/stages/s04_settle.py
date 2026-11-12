@@ -11,7 +11,7 @@ Order of operations is the guard:
 from decimal import Decimal
 
 from ..core.canonical import sha256_hex
-from ..core.errors import AmountMismatch, InvoiceNotDraft, NotAuthorized, NotCaptured, SealMissing, SealWriteFailed
+from ..core.errors import AmountMismatch, BudgetExceeded, InvoiceNotDraft, NotAuthorized, NotCaptured, SealMissing, SealWriteFailed
 from ..core.gates import APPROVED, require
 from ..core.ledger import EvidenceLedger
 from ..core.lineage import request_id
@@ -35,6 +35,8 @@ def prepare_order(
     buyer_ip: str = "0.0.0.0",
     currency: str = "USD",
     payment_source: dict | None = None,
+    mandate_budget: Decimal | None = None,
+    committed_spend: Decimal = Decimal("0"),
 ) -> dict:
     lid = decision.lineage_id
     if decision.route == "BLOCKED":
@@ -46,6 +48,15 @@ def prepare_order(
             raise NotAuthorized("human approval required", lineage_id=lid) from e
 
     pu = build_purchase_unit([LineItem(title, offer.sku, offer.unit_price, offer.quantity, tax_rate)], currency, lid, description=title)
+    order_total = Decimal(pu["amount"]["value"])
+    if mandate_budget is not None and committed_spend + order_total > mandate_budget:
+        raise BudgetExceeded(
+            f"order {order_total} + committed spend {committed_spend} exceeds mandate budget {mandate_budget}",
+            lineage_id=lid,
+            order_total=str(order_total),
+            committed_spend=str(committed_spend),
+            budget=str(mandate_budget),
+        )
     vaulted = bool(payment_source)
     terms = {
         "decision_digest": decision.decision_digest,

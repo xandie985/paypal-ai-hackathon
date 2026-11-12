@@ -8,7 +8,7 @@ never reaches the browser; a per-client rate limit bounds spend because the rout
 
 import json
 import time
-from collections import defaultdict, deque
+from collections import deque
 
 import anthropic
 from fastapi import APIRouter, Request
@@ -23,9 +23,14 @@ MAX_BODY_BYTES = 2_000_000
 MAX_TOOLS = 64
 RATE_LIMIT = 40  # requests per window per client; one assistant turn is one request
 RATE_WINDOW_S = 60.0
+MAX_TRACKED_CLIENTS = 1024
+# A ceiling on all clients together. The per-client key comes from proxy headers a caller can set, so it alone cannot
+# bound spend: rotating that header would otherwise reset the limit.
+GLOBAL_LIMIT = 300
 
 _ALLOWED_FIELDS = ("system", "messages", "tools", "tool_choice", "max_tokens")
-_hits: dict[str, deque[float]] = defaultdict(deque)
+_hits: dict[str, deque[float]] = {}
+_global_hits: deque[float] = deque()
 _client: anthropic.AsyncAnthropic | None = None
 
 
@@ -41,20 +46,43 @@ def _error(status: int, message: str) -> JSONResponse:
 
 
 def _client_id(request: Request) -> str:
+    for header in ("render-client-ip", "cf-connecting-ip", "true-client-ip"):
+        val = request.headers.get(header)
+        if val:
+            return val.strip()
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[0]
     return request.client.host if request.client else "unknown"
 
 
 def _rate_limited(client: str, now: float | None = None) -> bool:
     now = time.monotonic() if now is None else now
-    window = _hits[client]
+    while _global_hits and now - _global_hits[0] > RATE_WINDOW_S:
+        _global_hits.popleft()
+    if len(_global_hits) >= GLOBAL_LIMIT:
+        return True
+    if client in _hits:
+        window = _hits.pop(client)
+        _hits[client] = window
+    else:
+        if len(_hits) >= MAX_TRACKED_CLIENTS:
+            expired = [k for k, w in _hits.items() if not w or now - w[-1] > RATE_WINDOW_S]
+            for k in expired:
+                _hits.pop(k, None)
+            while len(_hits) >= MAX_TRACKED_CLIENTS:
+                _hits.pop(next(iter(_hits)), None)
+        window = deque()
+        _hits[client] = window
+
     while window and now - window[0] > RATE_WINDOW_S:
         window.popleft()
     if len(window) >= RATE_LIMIT:
         return True
     window.append(now)
+    _global_hits.append(now)
     return False
 
 

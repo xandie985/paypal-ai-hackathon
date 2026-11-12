@@ -114,6 +114,7 @@ class Run:
                 "events": len(self.events),
                 "budget": self.mandate.budget,
                 "spent": self.rt.spent(self.mandate_lineage),
+                "committed_spend": self.rt.committed_spend(self.mandate_lineage),
                 "ledger_entries": len(self.rt.ledger.entries(self.mandate_lineage)),
             }
         )
@@ -234,6 +235,7 @@ def step_prepare_order(run: Run, lineage: str, payment_source: dict | None = Non
     item = run.item(lineage)
     if item.prep:
         return item.prep
+    committed = run.rt.committed_spend(run.mandate_lineage, exclude_lineage_id=lineage)
     try:
         item.prep = s04_settle.prepare_order(
             run.rt.ledger,
@@ -246,6 +248,8 @@ def step_prepare_order(run: Run, lineage: str, payment_source: dict | None = Non
             approval_token=item.token,
             buyer_ip="203.0.113.7",
             payment_source=payment_source,
+            mandate_budget=run.mandate.budget,
+            committed_spend=committed,
         )
     except GuardViolation as e:
         run.emit("4", "guard", **e.to_dict())

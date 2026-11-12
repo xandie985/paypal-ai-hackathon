@@ -201,3 +201,74 @@ def test_studio_rows_carry_timestamps_newest_first(run):
     # The last item governed is the first row.
     last = max(snap["items"], key=lambda i: [r["created_at"] for r in rows if r["lineage_id"] == i["lineage_id"]][0])
     assert rows[0]["lineage_id"] == last["lineage_id"]
+
+
+def test_budget_overspend_prevented_across_concurrent_approvals():
+    """BUG-1 regression: two items ($1020 + $590) with a $1500 budget. Both are approved,
+    but after the first is prepared/settled, preparing the second raises BudgetExceeded (HTTP 409)."""
+    mandate = json.loads(client.post("/api/runs").text)["mandate"]
+    mandate["budget"] = "1500"
+    mandate["per_txn_cap"] = "1500"
+    mandate["auto_threshold"] = "300"
+    snap = client.post(
+        "/api/runs",
+        json={
+            "mandate": mandate,
+            "needs": [
+                {"description": "27in 4K monitor", "category": "monitors", "quantity": 3, "method": "negotiate"},
+                {"description": "1080p webcam", "category": "webcams", "quantity": 10, "method": "direct"},
+            ],
+        },
+    ).json()
+    base = f"/api/runs/{snap['run_id']}"
+    items = {i["need"]["category"]: i for i in snap["items"]}
+    mon, cam = items["monitors"], items["webcams"]
+    assert float(mon["total"]) == 1020.0
+    assert float(cam["total"]) == 590.0
+    assert mon["decision"]["route"] == "HUMAN_APPROVAL"
+    assert cam["decision"]["route"] == "HUMAN_APPROVAL"
+
+    # Human approves both
+    assert client.post(f"{base}/decisions/{mon['lineage_id']}/approve").status_code == 200
+    assert client.post(f"{base}/decisions/{cam['lineage_id']}/approve").status_code == 200
+
+    # First order ($1020) prepares cleanly
+    r1 = client.post(f"{base}/orders/{mon['lineage_id']}/prepare")
+    assert r1.status_code == 200
+    assert r1.json()["order_id"]
+
+    # Second order ($590) exceeds $1500 budget ($1020 + $590 = $1610 > $1500) -> 409 BudgetExceeded
+    r2 = client.post(f"{base}/orders/{cam['lineage_id']}/prepare")
+    assert r2.status_code == 409
+    body = r2.json()
+    err = body if "code" in body else body.get("detail", {})
+    assert err.get("code") == "BUDGET_EXCEEDED"
+
+    # Even after first order captures/settles, second order still cannot overspend
+    assert client.post(f"{base}/orders/{mon['lineage_id']}/capture").status_code == 200
+    r2_retry = client.post(f"{base}/orders/{cam['lineage_id']}/prepare")
+    assert r2_retry.status_code == 409
+    err2 = r2_retry.json() if "code" in r2_retry.json() else r2_retry.json().get("detail", {})
+    assert err2.get("code") == "BUDGET_EXCEEDED"
+
+
+def test_abandoned_seal_stops_holding_budget_but_a_capture_never_does():
+    """A sealed order PayPal never got approved (popup closed) releases its budget after SEAL_HOLD; a capture is spend for good."""
+    from datetime import UTC, datetime
+
+    from app.orchestrator import SEAL_HOLD
+
+    snap = client.post("/api/runs").json()
+    run = runs.RUNS[snap["run_id"]]
+    mon = next(i for i in snap["items"] if i["need"]["category"] == "monitors")
+    base = f"/api/runs/{snap['run_id']}"
+    client.post(f"{base}/decisions/{mon['lineage_id']}/approve")
+    assert client.post(f"{base}/orders/{mon['lineage_id']}/prepare").status_code == 200
+    later = datetime.now(UTC) + SEAL_HOLD * 2
+
+    held = run.rt.committed_spend(run.mandate_lineage)
+    assert held >= 1020  # the sealed monitor order counts (the auto-settled webcam captures may add to it)
+    assert run.rt.committed_spend(run.mandate_lineage, now=later) == held - 1020  # the abandoned seal has expired
+
+    assert client.post(f"{base}/orders/{mon['lineage_id']}/capture").status_code == 200
+    assert run.rt.committed_spend(run.mandate_lineage, now=later) == held  # captured: spend, however long ago

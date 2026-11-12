@@ -1,4 +1,9 @@
+import logging
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("pactguard.config")
 
 
 class Settings(BaseSettings):
@@ -56,6 +61,14 @@ class Settings(BaseSettings):
     @property
     def paypal_live(self) -> bool:
         return not self.replay_mode and bool(self.paypal_client_id and self.paypal_client_secret)
+
+    @model_validator(mode="after")
+    def _validate_gate_secret(self) -> "Settings":
+        placeholders = {"dev-only-gate-secret-change-me", "change-me-to-a-long-random-string"}
+        if self.gate_secret in placeholders:
+            msg = f"GATE_SECRET is set to placeholder '{self.gate_secret}'. Set a secure random secret in production/live environments."
+            logger.warning(msg)
+        return self
 
 
 settings = Settings()
