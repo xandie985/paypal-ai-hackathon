@@ -175,7 +175,7 @@ curl -s -X POST localhost:8000/api/demo/run
 | B-4 | **Real sandbox dispute** | A sandbox dispute has to be opened from the sandbox buyer account in the Resolution Center, and evidence can only be submitted in certain dispute states. Open one **early**, since it can take time to reach a state that accepts evidence. Replay is the fallback for the video. |
 | B-5 | **Channel3 API shape** | The live adapter's path, auth header and field names are **placeholders**. `docs.trychannel3.com` was not reachable from the build sandbox. Confirm against the docs and redeem `PAYPAL-HACKATHON-2026`. Only `LiveChannel3` changes. |
 | B-6 | **AG Studio / Studio Agent Framework** | **Done (2026-11-01).** The AG Studio Pro with AI trial licence (valid to 2026-12-16) is in `frontend/.env.local` as `VITE_AG_STUDIO_LICENSE`. `ag-studio` and `ag-studio-react` 3.0.0 are installed, and `#/studio` renders licensed (doc 11, UI-0.4). |
-| B-7 | **APIMatic Context Plugin, Render** | Set up accounts. These are not touched by the code yet. |
+| B-7 | **APIMatic Context Plugin, Render** | **Done (2026-11-12).** Render service deployed live at https://pactguard-ai.onrender.com. Orders v2 payload validated against APIMatic `paypal-server-sdk` 2.4.0 via `backend/scripts/apimatic_check.py`. |
 | B-8 | **LLM key** | Optional for the demo (replay works without it). Set `ANTHROPIC_API_KEY` for LLM-drafted seller messages and dispute narratives. |
 
 ### 🟧 Decisions to make before building the UI
@@ -205,7 +205,7 @@ These adopt the recommendations in `docs/10-execution-plan.md` §4 Phase 0. They
 | B-4 Sandbox dispute | **Open.** The disputes API answers 200 but lists 0 disputes. Stage 8 uses the replay dispute `PP-D-1001` until one exists. |
 | B-5 Channel3 | **Done.** `/v1/search` with `x-api-key` returns real products. It does not expose return terms, so live items route to human approval ("return terms hidden"). |
 | B-6 AG Studio | **Done.** The licence validates: no watermark and no licence warning on `#/studio`. See doc 11, UI-0.4. |
-| B-7 Render/APIMatic | **Open.** Accounts to set up. |
+| B-7 Render/APIMatic | **Done (2026-11-12).** Live deployment running at https://pactguard-ai.onrender.com; APIMatic payload validation verified via `backend/scripts/apimatic_check.py`. |
 | B-9 Saved-wallet capture | **Passed (2026-11-04).** Setup token approved by sandbox buyer, exchanged for vault payment token `8ng18757…`, and test order `7LX28344P4713330H` captured server-side (`3L94707948760335B` COMPLETED) with zero popup. Confirms autonomous `AUTO_SETTLE`. |
 | Source check (doc 02 arXiv IDs, doc 03 links) | **Done.** 36/36 resolved. StackOverflow and Hacker News block scripts, so those links count as passing on the anti-bot response. |
 

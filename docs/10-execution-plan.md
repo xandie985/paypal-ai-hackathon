@@ -79,7 +79,7 @@ Every design choice below traces to a paper in doc 02. Doc 09 §7 notes that the
 | Channel3, [`integrations/channel3.py`](../backend/app/integrations/channel3.py) | Replay and live both work (`/v1/search`, `x-api-key`), verified in Phase 0 | None |
 | LLM, [`integrations/llm.py`](../backend/app/integrations/llm.py) | Optional Claude layer with structured output and fallback | Not used by any stage yet. That's intended: it drafts text only. |
 | Frontend | Mission Control, the dispute desk, the webhook inspector and the AG Studio Command Center (Phases 1 to 3) | UI polish sweep in Phase 4 |
-| Deploy | `Dockerfile` and `render.yaml`; the API serves the built frontend; CORS comes from settings; verified locally as one process (2026-11-06) | Create the Render service from the Blueprint and fill in the secrets. Docker itself has not been run on this machine. |
+| Deploy | `Dockerfile` and `render.yaml`; the API serves the built frontend; CORS comes from settings; deployed live at https://pactguard-ai.onrender.com (2026-11-12) | None. Live service running and verified on Render Starter plan. |
 
 ---
 
@@ -174,7 +174,7 @@ Expect 29 passing. If the number differs, fix it before Phase 1. Every later pha
 | B-4 | Open a sandbox dispute. Buy something as sandbox buyer, then open a dispute in the sandbox Resolution Center. | `GET /v1/customer/disputes` lists it. Note when it reaches `WAITING_FOR_SELLER_RESPONSE`. | **Blocked on PayPal UI bug; Fallback R3 active (`PP-D-1001`)** |
 | B-5 | Redeem `PAYPAL-HACKATHON-2026`. Read the Channel3 docs: path, auth header, response fields, whether return policy is exposed. | One real search returns products | **Done (PASS, `/v1/search` + return table)** |
 | B-6 | **Done 2026-11-01.** AG Studio Pro with AI trial licence in `frontend/.env.local` (`VITE_AG_STUDIO_LICENSE`). Packages `ag-studio` and `ag-studio-react`, both 3.0.0. | `#/studio` renders run rows with the watermark hidden and no licence warning | **Done (PASS, closed 2026-11-01)** |
-| B-7 | Render and APIMatic accounts | Logged in. Context Plugin installed in the editor. | Open |
+| B-7 | Render and APIMatic accounts | Render deployed live at `https://pactguard-ai.onrender.com`; APIMatic payload validation scripted via `backend/scripts/apimatic_check.py` against `paypal-server-sdk` 2.4.0. | **Done (PASS, 2026-11-12)** |
 | B-8 | `ANTHROPIC_API_KEY` (optional) | `make_llm` returns a client | Optional (skipped in preflight) |
 | **B-9 (new)** | **Can AUTO_SETTLE capture without a buyer popup?** A server-created order needs buyer approval before capture. An "auto" purchase is only truly autonomous if the buyer has saved a PayPal wallet that we can charge later (vaulting). Check whether the sandbox app supports saving a PayPal wallet. | A test order against a saved wallet captures without a popup. If it doesn't, use the fallback in §5. | **Done (PASS, vault id `8ng18757…`, order `7LX28344P4713330H` captured)** |
 
@@ -441,10 +441,10 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 **Exit:** the public URL runs the arc. The evaluation table is in the README. **Feature freeze Tuesday Nov 10 at 18:00.**
 
 **Phase 4 status (2026-11-06):**
-- [x] 4a Render files: `Dockerfile`, `render.yaml`, `FRONTEND_DIST` static serving, CORS from settings, single worker. Verified locally as one process. [ ] The service itself is not created yet (needs the Render account, B-7).
+- [x] 4a Render deploy (2026-11-12): `Dockerfile`, `render.yaml`, `FRONTEND_DIST` static serving, CORS from settings, single worker. Service deployed live on Render Starter at https://pactguard-ai.onrender.com.
 - [x] 4b APIMatic (2026-11-12), scoped honestly: the Context Plugin was installed late and did not guide the code, so it is not claimed. What was done instead: `backend/scripts/apimatic_check.py` validates our Orders v2 create-order payloads (two purchase units, the saved-wallet payment source) against the models of APIMatic's generated `paypal-server-sdk` 2.4.0, with a negative control; result: 0 problems. Transaction Search query parameters were also checked against the SDK's list. The SDK has no Invoicing, Payouts or Disputes models, so those are unchecked. The README says exactly this.
 - [x] 4c Evaluation harness `backend/eval/` with `RESULTS.md`, also run as tests. It found paraphrased prompt injection slipping past the regex tripwire; the patterns were widened using the dev phrases only and the held-out catch rate (1 of 5) is reported as a known gap.
-- [x] 4d README rewritten for judges. [ ] Add the live URL after deploying.
+- [x] 4d README rewritten for judges; live URL added (https://pactguard-ai.onrender.com).
 - [~] 4e UI polish sweep: largely done for the Command Center (formats, grouped tabs, hints, provenance chip, loading and error states, drawers, keyboard navigation). Not covered: the Mission Control screens, narrow-viewport checks and dark mode.
 - [x] 4f Core hardening (2026-11-12, PR #9): mandate budget now counts sealed but uncaptured orders (`Runtime.committed_spend`, `BudgetExceeded`), with a 30-minute expiry on an abandoned seal; the assistant proxy bounds its per-client table, keys on Render's proxy headers and has a 300-a-minute global ceiling; a placeholder `GATE_SECRET` is logged; the two eval files are formatted. Known limitations (BUG-2 category collision, BUG-3 tail truncation, held-out injection) are in the README.
 
@@ -486,7 +486,7 @@ Open items from later phases, kept here so they aren't lost while Phase 2 runs. 
 - [x] **Agent-to-PayPal reconciliation page (2026-11-12).** `app/studio_reconcile.py` derives one row per captured agent purchase from the `capture_id` join, plus PayPal purchase captures the agent never decided; `GET /api/studio/reconciliation`, `src/studio/reconcileReport.ts`. Statuses: Matched, Amount mismatch, Pending (captured within 3 h; Transaction Search may lag), Outside window (older than 31 days), Unsettled, Simulated (seeded or replay: no PayPal object), Not decided by agent. The replay fixture includes one such orphan (`TXN-FIXT-0007`). Tests: `tests/test_studio_reconcile.py`. The live status logic is covered by unit tests only, not by a live sandbox read.
 - [ ] **Command Center loose ends:** the Revenue invoice-date filter has no default period (Studio 3.0 does not apply a relative date filter from saved state on load); Mission Control narrow-viewport and dark-mode checks.
 - [ ] **Licence for the boilerplate.** The README credits `paypaldev/hackathon-paypal-ag-grid-boilerplate`, which has no licence file. A person should confirm the wording.
-- [ ] `backend/eval/firewall_cases.py` and `backend/eval/run_all.py` fail `ruff format --check`; they were that way before the Command Center work.
+- [x] `backend/eval/firewall_cases.py` and `backend/eval/run_all.py` pass `ruff format --check` (formatted 2026-11-12 in PR #9).
 - [ ] **Stages 6, 7 and 10 are still scripted.** Invoice forensics, payout release and calibration run in replay and seeded history, not on live sandbox objects.
 
 ## 7. What we are not building

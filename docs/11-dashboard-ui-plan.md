@@ -771,7 +771,7 @@ Status values: `todo`, `doing`, `done`, `cut`. Update this table in the same cha
 | UI-4.4 | Performance pass | Should | todo |
 | UI-4.5 | Copy and honesty labels | Must | todo |
 | UI-4.6 | Meta and footer | Should | todo |
-| UI-4.7 | Render serving check | Must | todo |
+| UI-4.7 | Render serving check | Must | done (live at https://pactguard-ai.onrender.com) |
 | UI-5.1 | Present mode | Must | todo |
 | UI-5.2 | Screenshot set | Must | todo |
 | UI-5.3 | Rehearse and record | Must | todo |
