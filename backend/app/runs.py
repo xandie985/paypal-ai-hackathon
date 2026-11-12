@@ -6,8 +6,10 @@ Gate tokens stay in `Item.token` on the server and are never put in an event or 
 """
 
 import asyncio
+import re
 import uuid
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi.encoders import jsonable_encoder
@@ -15,10 +17,10 @@ from fastapi.encoders import jsonable_encoder
 from .config import Settings
 from .core.errors import GuardViolation
 from .core.lineage import request_id, txn_lineage
-from .domain.models import Decision, Mandate, Need, Offer, Proposal
-from .integrations.paypal import PayPalAPIError
+from .domain.models import Decision, DeliveryReport, Mandate, Need, Offer, Proposal, VendorInvoice
+from .integrations.paypal import PayPalAPIError, SandboxPayPal
 from .orchestrator import DEMO_MANDATE, Runtime, demo_sellers
-from .stages import s01_delegate, s02_discover, s02_negotiate, s03_govern, s04_settle
+from .stages import s01_delegate, s02_discover, s02_negotiate, s03_govern, s04_settle, s05_verify, s06_reconcile, s07_payout
 
 DEMO_NEEDS = [
     {"description": "1080p webcam newegg", "category": "webcams", "quantity": 2, "method": "direct"},
@@ -56,6 +58,7 @@ class Run:
     subscribers: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = field(default_factory=list)
     complete: bool = False
     ready: bool = False  # set once every need is governed; before that an early capture must not end the run
+    forensics: s06_reconcile.InvoiceForensics | None = None  # duplicate memory across this run's invoices
 
     def emit(self, stage: str, event: str, **data) -> None:
         e = jsonable_encoder({"seq": len(self.events), "stage": stage, "event": event, **data})
@@ -288,6 +291,142 @@ def step_retry_order(run: Run, lineage: str) -> dict:
     same = again["id"] == item.prep["order"]["id"]
     run.emit("4", "retry", lineage_id=lineage, order_id=again["id"], same_order=same)
     return {"order_id": again["id"], "same_order": same}
+
+
+def step_post_purchase(run: Run, lineage: str) -> dict:
+    """Stages 5 to 7 for one settled purchase, as one demonstrable sequence: verify delivery, reconcile the vendor's
+    invoice, try a payout the gates must refuse, then release it with both tokens. The carrier report and the vendor
+    invoices are **scripted** (nothing real stands behind them); the gates, ledger entries and payout call are the
+    real stage code. The gate tokens stay in local variables: they are never emitted or returned."""
+    item = run.item(lineage)
+    if item.status != "settled" or not item.prep:
+        raise ValueError("only a settled purchase can go through post-purchase checks")
+    ledger, secret = run.rt.ledger, run.rt.settings.gate_secret
+    if ledger.latest(lineage, "payout"):
+        raise ValueError("this purchase has already been paid out")
+    order_id, vendor = item.prep["order"]["id"], item.offer.seller_id
+    amount = Decimal(item.prep["seal"]["amount"])
+    slug = re.sub(r"[^a-z0-9]+", "", vendor.lower()) or "vendor"
+    payee, registry = f"ar@{slug}.example", {vendor: f"ar@{slug}.example"}
+    steps: list[dict] = []
+
+    def step(stage: str, event: str, outcome: str, title: str, detail: str, **data) -> None:
+        steps.append({"stage": stage, "outcome": outcome, "title": title, "detail": detail})
+        run.emit(stage, event, lineage_id=lineage, outcome=outcome, **data)
+
+    today = date.today()
+    ver = s05_verify.verify_delivery(
+        ledger,
+        secret,
+        lineage,
+        order_id,
+        DeliveryReport(
+            carrier="FedEx",
+            tracking_number=f"SCRIPTED-{lineage[-6:].upper()}",
+            tracking_status="DELIVERED",
+            delivered_on=today.isoformat(),
+            due_by=(today + timedelta(days=3)).isoformat(),
+            rubric={"quantity received": True, "item matches order": True},
+        ),
+    )
+    step(
+        "5",
+        "verified",
+        ver["verdict"],
+        "Delivery verified",
+        "Scripted carrier report checked against the sealed terms: "
+        + ("on time, rubric passed. VERIFIED gate token issued." if ver["token"] else "; ".join(ver["problems"])),
+        verdict=ver["verdict"],
+    )
+
+    forensics = run.forensics = run.forensics or s06_reconcile.InvoiceForensics({})
+    forensics.vendor_registry.update(registry)
+    clean = forensics.check(
+        ledger,
+        secret,
+        VendorInvoice(vendor=vendor, invoice_number="INV-1001", amount=amount, payee_email=payee, lineage_id=lineage, memo=item.title),
+    )
+    step(
+        "6",
+        "reconciled",
+        clean["status"],
+        "Vendor invoice reconciled",
+        "Invoice INV-1001 matches the sealed order, the delivery proof and the registered payee. RECONCILED gate token issued."
+        if clean["token"]
+        else "Flags: " + "; ".join(clean["flags"]),
+        status=clean["status"],
+    )
+    spoof = forensics.check(
+        ledger,
+        secret,
+        VendorInvoice(
+            vendor=vendor,
+            invoice_number="INV 1001",
+            amount=amount,
+            payee_email=f"billing@{slug}-payments.example",
+            lineage_id=lineage,
+            memo=item.title,
+        ),
+    )
+    step(
+        "6",
+        "resubmitted",
+        spoof["status"],
+        "Spoofed resubmission flagged",
+        "The same invoice resubmitted with a different payee: " + "; ".join(spoof["flags"]),
+        status=spoof["status"],
+        flags=spoof["flags"],
+    )
+
+    live = isinstance(run.rt.gateway, SandboxPayPal)  # the sandbox Payouts call is not fired from a demo button
+
+    def payout(reconciled_token: str | None) -> dict:
+        return s07_payout.release_payout(
+            ledger,
+            run.rt.gateway,
+            secret,
+            lineage,
+            order_id=order_id,
+            invoice_number="INV-1001",
+            payee_email=payee,
+            gross=amount,
+            verified_token=ver["token"],
+            reconciled_token=reconciled_token,
+        )
+
+    try:
+        payout(spoof["token"])  # the flagged invoice minted no token
+        refused = False
+    except GuardViolation as e:
+        refused = True
+        step(
+            "7",
+            "guard",
+            "refused",
+            "Payout refused",
+            f"Attempted on the flagged resubmission: {e.code}. No RECONCILED token exists for it.",
+            code=e.code,
+            message=str(e),
+        )
+    if not refused:
+        raise RuntimeError("a payout went through without a RECONCILED token")
+    if live:
+        step("7", "payout_skipped", "skipped", "Payout not sent", "Live mode: the sandbox Payouts call is not fired from this button.")
+    elif not (ver["token"] and clean["token"]):
+        step("7", "payout_withheld", "refused", "Payout withheld", "A gate token is missing, so the release is not attempted.")
+    else:
+        po = payout(clean["token"])
+        net, fee, batch = str(po["split"]["net"]), str(po["split"]["fee"]), po["batch_header"]["sender_batch_id"]
+        step(
+            "7",
+            "payout_released",
+            "released",
+            "Payout released",
+            f"Both gate tokens present. Net {net} after {fee} in fees (an illustrative fee split), batch {batch}.",
+            net=net,
+            fee=fee,
+        )
+    return {"lineage_id": lineage, "scripted_inputs": True, "steps": steps}
 
 
 def step_attack(run: Run) -> Decision:
