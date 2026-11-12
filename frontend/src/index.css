@@ -122,3 +122,10 @@
   background: linear-gradient(135deg, #2563eb, #0d9488);
   flex: none;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .v1-hero::after,
+  .decision-card {
+    animation: none;
+  }
+}
