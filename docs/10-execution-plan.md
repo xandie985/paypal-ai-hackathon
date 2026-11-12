@@ -12,7 +12,7 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
-> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5). The Command Center grew from one flat table into a six-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 155 tests pass. Still open: the live PayPal read (only mock-tested), the Render deploy, APIMatic, and the backlog in §6.
+> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #10, #11). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 162 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Still open: the Render deploy, APIMatic, and the backlog in §6.
 
 ---
 
@@ -72,7 +72,7 @@ Every design choice below traces to a paper in doc 02. Doc 09 §7 notes that the
 |---|---|---|
 | Core primitives: ledger, lineage, gates, money | Built, with tests | None |
 | Stages 1–10 | Built. The full arc runs in replay mode. | Stages 5, 6, 7 and 10 are scripted rather than live |
-| Tests | 155 passing (2026-11-12) | None |
+| Tests | 162 passing (2026-11-12) | None |
 | API, [`api.py`](../backend/app/api.py) | `POST /api/demo/run`, `GET /api/ledger`, `/ledger/verify`, `/studio/rows` | **`/demo/run` is one synchronous call.** A UI can't pause for human approval, and a real PayPal order can't wait for buyer approval. This is the first task in Phase 1. |
 | Orchestrator, [`orchestrator.py`](../backend/app/orchestrator.py) | `run_demo` runs the whole arc and calls `asyncio.run(negotiate(...))` | `asyncio.run` can't be called from inside an async endpoint. Negotiation has to be awaited directly. |
 | PayPal client, [`integrations/paypal.py`](../backend/app/integrations/paypal.py) | `SandboxPayPal` covers Orders v2, Invoicing v2, Payouts v1, `provide-evidence` and webhook verify, with OAuth caching | Run live in Phases 0 and 1. Webhook verification now takes the raw body (Phase 3, pain point #11). |
@@ -336,7 +336,7 @@ Stack: React 19, Vite, Tailwind 4 (already installed), and the PayPal JS SDK. We
 - [x] **Agent to PayPal join:** `Transactions.capture_id` is related many-to-one to `PayPal Transactions.id`. Detail drawers open both ways: a capture cell opens the PayPal transaction (with the linked agent purchase), and the lineage drawer links back to its PayPal capture. Invoice rows open an invoice drawer.
 - [x] **Host UI:** grouped tabs, the selected page kept in the URL hash (`#/studio/<page>`), arrow-key, Home and End tab navigation, per-page hints, a Live or Replay chip with an "as of" time and Refresh, a loading skeleton, and Retry on failure. Revenue has a currency switch (USD preselected) because invoices are USD or EUR and are not converted.
 - [x] **Fix:** `GET /api/studio/lineage/{id}` also resolves rows from the persistent runtime ledger after a restart.
-- [ ] Not verified: the live sandbox read has only run against a mock PayPal. Transaction Search was enabled on the sandbox app afterwards, but no live read has been confirmed yet.
+- [x] Live sandbox read: verified on 2026-11-12 (see the backlog in §6). The green chip in the browser UI against the live backend was not re-checked.
 
 ---
 
