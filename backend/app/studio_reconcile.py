@@ -18,6 +18,10 @@ SEARCH_WINDOW = timedelta(days=31)  # Transaction Search cannot see further back
 INDEX_LAG = timedelta(hours=3)  # a fresh capture can take a while to appear in Transaction Search
 TOLERANCE = 0.005
 
+# The two event codes an agent capture shows up as: a checkout capture, or a vaulted (saved-wallet) one. Live sandbox
+# captures are credits to the merchant account, so direction is not part of the test.
+PURCHASE_CAPTURES = {"Purchase capture", "Pre-approved payment"}
+
 NOTES = {
     "Matched": "PayPal shows this capture for the same amount.",
     "Amount mismatch": "PayPal shows this capture, but for a different amount than the agent sealed.",
@@ -98,9 +102,7 @@ def reconcile(agent_rows: list[dict], transactions: list[dict], source: str, as_
     captured = [r for r in agent_rows if r.get("capture_id") and r.get("status") == "CAPTURED"]
     rows = [_agent_row(r, by_id.get(r["capture_id"]), source, as_of) for r in captured]
     seen = {r["capture_id"] for r in captured}
-    rows += [
-        _orphan_row(t) for t in transactions if t["eventType"] == "Purchase capture" and t["direction"] == "Debit" and t["id"] not in seen
-    ]
+    rows += [_orphan_row(t) for t in transactions if t["eventType"] in PURCHASE_CAPTURES and t["id"] not in seen]
     rows.sort(key=lambda r: r["date"] or "", reverse=True)
     return rows
 

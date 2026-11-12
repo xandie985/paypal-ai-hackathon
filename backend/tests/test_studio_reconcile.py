@@ -53,7 +53,15 @@ def test_every_status():
         agent("C-GONE", "10.00"),
         agent("C-REJ", "10.00", status="REJECTED"),
     ]
-    txns = [txn("C-OK"), txn("C-BAD", "-12.00"), txn("C-EUR", currency="EUR"), txn("C-SIM"), txn("ORPHAN"), txn("T-PAYOUT", event="Payout")]
+    txns = [
+        txn("C-OK"),
+        txn("C-BAD", "-12.00"),
+        txn("C-EUR", currency="EUR"),
+        txn("C-SIM"),
+        txn("ORPHAN"),
+        txn("ORPHAN-VAULT", "28.00", "-1.25", event="Pre-approved payment"),  # live captures are credits
+        txn("T-PAYOUT", event="Payout"),
+    ]
     rows = reconcile(agents, txns, "live", AS_OF)
     assert status_of(rows, "C-OK") == "Matched"
     assert status_of(rows, "C-BAD") == "Amount mismatch"
@@ -63,6 +71,7 @@ def test_every_status():
     assert status_of(rows, "C-OLD") == "Outside window"
     assert status_of(rows, "C-GONE") == "Unsettled"
     assert status_of(rows, "ORPHAN") == "Not decided by agent"
+    assert status_of(rows, "ORPHAN-VAULT") == "Not decided by agent"
     ids = {r["id"] for r in rows}
     assert "C-REJ" not in ids and "T-PAYOUT" not in ids  # not captured / not a purchase capture
 
