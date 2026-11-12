@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import type { MandateInput } from '../../api/client'
 import { DEFAULTS, PRESET_STRICT } from './defaults'
 
+const list = (s: string) =>
+  s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+
 export function MandateForm({
   busy,
   onStart,
@@ -13,6 +19,9 @@ export function MandateForm({
 }) {
   const [m, setM] = useState<MandateInput>(DEFAULTS)
   const [activePreset, setActivePreset] = useState<'office' | 'strict' | null>('office')
+  // The two list fields keep what was typed: rebuilding the text from the parsed list would swallow each comma as it is typed.
+  const [vendorText, setVendorText] = useState(DEFAULTS.vendor_allowlist.join(', '))
+  const [categoryText, setCategoryText] = useState(DEFAULTS.allowed_categories.join(', '))
 
   useEffect(() => {
     onMandateChange?.(m)
@@ -21,6 +30,8 @@ export function MandateForm({
   const applyPreset = (preset: 'office' | 'strict') => {
     const next = preset === 'office' ? DEFAULTS : PRESET_STRICT
     setM(next)
+    setVendorText(next.vendor_allowlist.join(', '))
+    setCategoryText(next.allowed_categories.join(', '))
     setActivePreset(preset)
   }
 
@@ -33,6 +44,10 @@ export function MandateForm({
   if (autoNum > budgetNum) errs.push('Auto threshold cannot exceed budget.')
   if (!(capNum > 0)) errs.push('Cap must be greater than 0.')
   if (capNum > budgetNum) errs.push('Cap cannot exceed budget.')
+  if (autoNum > capNum) errs.push('Auto threshold cannot exceed the per-transaction cap.')
+  if (!Number.isInteger(m.min_return_days) || m.min_return_days < 0) errs.push('Min return days must be a whole number, 0 or more.')
+  if (m.vendor_allowlist.length === 0) errs.push('Add at least one vendor to the allowlist.')
+  if (m.allowed_categories.length === 0) errs.push('Add at least one allowed category.')
 
   const inputClass =
     'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-xs focus:border-indigo-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100'
@@ -151,16 +166,11 @@ export function MandateForm({
         <textarea
           rows={2}
           className={`${inputClass} resize-none font-mono text-xs`}
-          value={m.vendor_allowlist.join(', ')}
+          value={vendorText}
           onChange={(e) => {
             setActivePreset(null)
-            setM({
-              ...m,
-              vendor_allowlist: e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-            })
+            setVendorText(e.target.value)
+            setM({ ...m, vendor_allowlist: list(e.target.value) })
           }}
         />
         <p className="mt-1 text-[11px] text-slate-400">Comma-separated domains or merchant names. Rejects unlisted sellers.</p>
@@ -170,16 +180,11 @@ export function MandateForm({
         <label className="text-xs font-medium text-slate-600">Allowed categories</label>
         <input
           className={inputClass}
-          value={m.allowed_categories.join(', ')}
+          value={categoryText}
           onChange={(e) => {
             setActivePreset(null)
-            setM({
-              ...m,
-              allowed_categories: e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-            })
+            setCategoryText(e.target.value)
+            setM({ ...m, allowed_categories: list(e.target.value) })
           }}
         />
       </div>
