@@ -4,7 +4,7 @@
 
 Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/).
 
-> **Live demo:** _add the Render URL here after deploying (see "Deploy" below)._ It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox.
+> **Live demo:** [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com). It opens in replay mode, so it never depends on sandbox uptime and judges cannot spend our sandbox.
 
 ## The loop
 
@@ -67,7 +67,7 @@ To use the live sandbox, set `REPLAY_MODE=false` and fill in the PayPal and Chan
 | **PayPal** | REST APIs called directly: Orders v2 (create, capture, vault), Invoicing v2 (draft-first, then send), Payouts v1, Disputes (read, offer, message, evidence), and Webhooks (raw-body verification). We do not use `@paypal/agent-toolkit`: it has no spend cap, no idempotency discipline and no payout tool, which are the gaps the firewall, lineage-derived request IDs and gate tokens close. |
 | **AG Grid / AG Studio** | The Command Center is a seven-page AG Studio report grouped under **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`): spend, savings by vendor, firewall routes and latency, human escalations, dispute outcomes beside supplier trust, and PayPal account reporting joined to agent captures via `capture_id`. Clicking a row opens its sealed lineage or PayPal detail drawer. A mandate v1 → v2 diff sits beside it. The Studio assistant runs on **Claude Haiku 5.5** through an adapter we wrote for Studio's `AgLlmAdapter` contract, with the key held server-side. |
 | **Channel3** | Live product search for the retail baseline and candidate sellers. |
-| **Render** | One Docker web service from `render.yaml`. Not yet deployed by us: that needs the account step. |
+| **Render** | One Docker web service deployed from `render.yaml` at [https://pactguard-ai.onrender.com](https://pactguard-ai.onrender.com) serving the FastAPI backend and built React frontend together. |
 | **APIMatic** | Used after the fact, as an independent check, not while writing the code. We ran our real Orders v2 create-order payloads (two purchase units and the saved-wallet payment source) through the models of APIMatic's generated [`paypal-server-sdk`](https://pypi.org/project/paypal-server-sdk/) 2.4.0: nothing we send is unknown to the SDK or altered by it, the required fields are present, and an injected misspelt field is caught. Our Transaction Search query parameters also match the SDK's. That SDK has no Invoicing, Payouts or Disputes models, so those payloads were **not** validated this way. Re-run it with [`backend/scripts/apimatic_check.py`](backend/scripts/apimatic_check.py). We also installed APIMatic's PayPal Context Plugin on 2026-11-12, after the integration code was written, so it did not guide that code. |
 | **Anthropic Claude** | Optional, and never in the money path: rewording dispute drafts, and the Studio assistant. With no key, or in replay mode, templates are used. |
 

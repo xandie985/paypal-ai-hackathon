@@ -12,7 +12,7 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
-> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #9, #10, #11, #12). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 168 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Still open: the Render deploy, APIMatic, and the backlog in §6.
+> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #9, #10, #11, #12, #13, #14). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 168 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Render is deployed live at https://pactguard-ai.onrender.com, and APIMatic payload validation is recorded. Details: §6.
 
 ---
 
