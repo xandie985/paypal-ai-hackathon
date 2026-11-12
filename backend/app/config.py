@@ -67,6 +67,8 @@ class Settings(BaseSettings):
         placeholders = {"dev-only-gate-secret-change-me", "change-me-to-a-long-random-string"}
         if self.gate_secret in placeholders:
             msg = f"GATE_SECRET is set to placeholder '{self.gate_secret}'. Set a secure random secret in production/live environments."
+            if not self.replay_mode:
+                raise ValueError(msg)  # live money must never sit behind a published secret
             logger.warning(msg)
         return self
 

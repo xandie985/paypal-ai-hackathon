@@ -15,7 +15,8 @@ from decimal import Decimal
 from fastapi.encoders import jsonable_encoder
 
 from .config import Settings
-from .core.errors import GuardViolation
+from .core.canonical import sha256_hex
+from .core.errors import BudgetExceeded, GuardViolation
 from .core.lineage import request_id, txn_lineage
 from .domain.models import Decision, DeliveryReport, Mandate, Need, Offer, Proposal, VendorInvoice
 from .integrations.paypal import PayPalAPIError, SandboxPayPal
@@ -264,6 +265,21 @@ def step_capture_order(run: Run, lineage: str) -> dict:
         raise ValueError("order not prepared")
     if item.capture:
         return item.capture
+    order_total = Decimal(item.prep["seal"]["amount"])
+    caps = [c for pu in item.prep["order"].get("purchase_units", []) for c in pu.get("payments", {}).get("captures", [])]
+    if not caps:  # a saved-wallet order was captured at creation, so there is nothing left to hold back
+        # The seal's hold may have expired while the buyer sat on the PayPal popup and another order taken the budget.
+        committed = run.rt.committed_spend(run.mandate_lineage, exclude_lineage_id=lineage)
+        if committed + order_total > run.mandate.budget:
+            err = BudgetExceeded(
+                f"order {order_total} + committed spend {committed} exceeds mandate budget {run.mandate.budget} at capture",
+                lineage_id=lineage,
+                order_total=str(order_total),
+                committed_spend=str(committed),
+                budget=str(run.mandate.budget),
+            )
+            run.emit("4", "guard", **err.to_dict())
+            raise err
     try:
         item.capture = s04_settle.capture(
             run.rt.ledger, run.rt.gateway, lineage, item.prep["order"]["id"], order_payload=item.prep["order"]
@@ -311,6 +327,8 @@ def step_post_purchase(run: Run, lineage: str) -> dict:
     order_id, vendor = item.prep["order"]["id"], item.offer.seller_id
     amount = Decimal(item.prep["seal"]["amount"])
     slug = re.sub(r"[^a-z0-9]+", "", vendor.lower()) or "vendor"
+    # One number per purchase: two purchases from the same vendor must not look like a duplicate invoice.
+    inv_no = f"INV-{sha256_hex(lineage)[:8].upper()}"
     payee, registry = f"ar@{slug}.example", {vendor: f"ar@{slug}.example"}
     steps: list[dict] = []
 
@@ -348,14 +366,14 @@ def step_post_purchase(run: Run, lineage: str) -> dict:
     clean = forensics.check(
         ledger,
         secret,
-        VendorInvoice(vendor=vendor, invoice_number="INV-1001", amount=amount, payee_email=payee, lineage_id=lineage, memo=item.title),
+        VendorInvoice(vendor=vendor, invoice_number=inv_no, amount=amount, payee_email=payee, lineage_id=lineage, memo=item.title),
     )
     step(
         "6",
         "reconciled",
         clean["status"],
         "Vendor invoice reconciled",
-        "Invoice INV-1001 matches the sealed order, the delivery proof and the registered payee. RECONCILED gate token issued."
+        f"Invoice {inv_no} matches the sealed order, the delivery proof and the registered payee. RECONCILED gate token issued."
         if clean["token"]
         else "Flags: " + "; ".join(clean["flags"]),
         status=clean["status"],
@@ -365,7 +383,7 @@ def step_post_purchase(run: Run, lineage: str) -> dict:
         secret,
         VendorInvoice(
             vendor=vendor,
-            invoice_number="INV 1001",
+            invoice_number=inv_no.replace("-", " "),
             amount=amount,
             payee_email=f"billing@{slug}-payments.example",
             lineage_id=lineage,
@@ -391,7 +409,7 @@ def step_post_purchase(run: Run, lineage: str) -> dict:
             secret,
             lineage,
             order_id=order_id,
-            invoice_number="INV-1001",
+            invoice_number=inv_no,
             payee_email=payee,
             gross=amount,
             verified_token=ver["token"],

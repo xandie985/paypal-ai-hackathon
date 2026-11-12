@@ -272,3 +272,20 @@ def test_abandoned_seal_stops_holding_budget_but_a_capture_never_does():
 
     assert client.post(f"{base}/orders/{mon['lineage_id']}/capture").status_code == 200
     assert run.rt.committed_spend(run.mandate_lineage, now=later) == held  # captured: spend, however long ago
+
+
+def test_capture_rechecks_budget_when_the_seal_hold_lapsed():
+    """The buyer sat on the popup past SEAL_HOLD and another order took the budget: capture must refuse, not overspend."""
+    snap = client.post("/api/runs").json()
+    run = runs.RUNS[snap["run_id"]]
+    mon = next(i for i in snap["items"] if i["need"]["category"] == "monitors")
+    base = f"/api/runs/{snap['run_id']}"
+    client.post(f"{base}/decisions/{mon['lineage_id']}/approve")
+    assert client.post(f"{base}/orders/{mon['lineage_id']}/prepare").status_code == 200
+    real = run.rt.committed_spend
+    run.rt.committed_spend = lambda *a, **k: real(*a, **k) + 1200  # another order now holds the budget
+    res = client.post(f"{base}/orders/{mon['lineage_id']}/capture")
+    run.rt.committed_spend = real
+    assert res.status_code != 200 and "BUDGET_EXCEEDED" in res.text
+    assert not run.rt.ledger.entries(mon["lineage_id"], "capture")
+    assert any(e["event"] == "guard" and e.get("code") == "BUDGET_EXCEEDED" for e in run.events)
