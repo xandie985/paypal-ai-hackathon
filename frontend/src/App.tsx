@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { api, type MandateInput } from './api/client'
+import { api, type DemoRunResult, type MandateInput } from './api/client'
 import { useRunSession } from './api/useRunSession'
 import { AttackButton } from './features/attack/Actions'
 import { DealCard } from './features/deal/DealCard'
@@ -40,6 +40,9 @@ export default function App() {
   const [mode, setMode] = useState<string>('…')
   const [currentMandate, setCurrentMandate] = useState<MandateInput>(DEFAULTS)
   const [runMandate, setRunMandate] = useState<MandateInput | null>(null) // what the shown run was started with
+  const [demoResult, setDemoResult] = useState<DemoRunResult | null>(null)
+  const [demoBusy, setDemoBusy] = useState(false)
+  const [showModeModal, setShowModeModal] = useState(false)
   const { run, events, error, busy, start, act } = useRunSession()
   const hash = useHash()
   const studio = hash === '#/studio' || hash.startsWith('#/studio/')
@@ -50,6 +53,18 @@ export default function App() {
       .then((h) => setMode(h.paypal_live ? 'live sandbox' : 'replay'))
       .catch(() => setMode('backend offline'))
   }, [])
+
+  const runDemoShowcase = async () => {
+    setDemoBusy(true)
+    try {
+      const res = await api.demoRun()
+      setDemoResult(res)
+    } catch (e) {
+      console.error('Demo run error', e)
+    } finally {
+      setDemoBusy(false)
+    }
+  }
 
   const heldItems = run?.items.filter((i) => i.status === 'awaiting_approval') ?? []
   const capturedCount = run?.items.filter((i) => i.status === 'settled').length ?? 0
@@ -134,11 +149,92 @@ export default function App() {
               {heldItems.length}<span className="hidden sm:inline"> awaiting approval</span>
             </span>
           )}
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
-            {mode}
-          </span>
+
+          <button
+            type="button"
+            onClick={() => setShowModeModal(true)}
+            className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
+            title="Click to view Sandbox vs Replay details"
+          >
+            <span className={`h-2 w-2 rounded-full ${mode === 'live sandbox' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            <span>{mode}</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={demoBusy}
+            onClick={runDemoShowcase}
+            className="hidden items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50 md:flex"
+            title="Execute complete 10-stage loop immediately on an in-memory ledger"
+          >
+            {demoBusy ? (
+              <>
+                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Running 10 stages…
+              </>
+            ) : (
+              <>
+                <svg className="h-3.5 w-3.5 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
+                </svg>
+                Run 10-Stage Showcase
+              </>
+            )}
+          </button>
         </div>
       </header>
+
+      {/* Replay vs Live Info Modal */}
+      {showModeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Execution Mode</h3>
+                <p className="text-xs text-slate-500">How PactGuard interacts with PayPal and external APIs</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModeModal(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-xs leading-relaxed text-slate-600">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5">
+                <b className="block text-amber-900 font-semibold">Current: Replay Mode (Deterministic Simulation)</b>
+                <p className="mt-1 text-amber-800">
+                  Enables zero-latency, 100% reliable evaluation without requiring external PayPal sandbox API credentials or risking sandbox service outages. Orders, captures, payouts, and invoices use deterministic fixtures.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                <b className="block text-slate-900 font-semibold">Live PayPal Sandbox Mode</b>
+                <p className="mt-1 text-slate-600">
+                  To connect directly to real PayPal REST APIs (Orders v2, Vaulted payment sources, Payouts v1, Disputes, and Webhooks):
+                </p>
+                <code className="mt-2 block rounded bg-slate-200/70 p-2 font-mono text-[11px] text-slate-800">
+                  REPLAY_MODE=false<br />
+                  PAYPAL_CLIENT_ID=&lt;your_sandbox_client_id&gt;<br />
+                  PAYPAL_CLIENT_SECRET=&lt;your_sandbox_secret&gt;
+                </code>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowModeModal(false)}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       {studio ? (
@@ -164,6 +260,56 @@ export default function App() {
 
             {/* Right Column: Guided Workspace */}
             <div className="min-w-0 space-y-5">
+              {/* 10-Stage Showcase Completed Banner */}
+              {demoResult && (
+                <div className="rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 p-5 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 text-sm font-bold text-emerald-950">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        ✓
+                      </span>
+                      10-Stage Autonomous Showcase Completed (~1s)
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDemoResult(null)}
+                      className="text-xs text-slate-400 hover:text-slate-700"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-emerald-900">
+                    The agent completed all 10 stages: Mandate registration, Channel3 discovery, 4-seller negotiation (12.6% saved), firewall policy evaluation, PayPal settlement &amp; seal, delivery verification, invoice forensic checks (flagged duplicate &amp; mismatch), server-token gated payout, dispute triage, and self-tightened mandate calibration.
+                  </p>
+                  <div className="mt-3.5 grid gap-2.5 sm:grid-cols-4 text-xs font-medium">
+                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block">Evaluated Spend</span>
+                      <b className="text-sm font-bold text-slate-900">$1,138.00</b>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block">Firewall Routes</span>
+                      <b className="text-sm font-bold text-slate-900">1 Auto · 1 Gate · 1 Blocked</b>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block">Cryptographic Ledger</span>
+                      <b className="text-sm font-bold text-emerald-700">21 Entries (Chain OK)</b>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200/80 bg-white/70 p-2.5">
+                      <span className="text-[10px] uppercase text-slate-500 block">Stage 10 Calibration</span>
+                      <b className="text-sm font-bold text-indigo-700">Mandate Auto-Tightened</b>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <a
+                      href="#/studio"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-800"
+                    >
+                      Explore Evidence in Command Center →
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {/* Hero Banner */}
               <div className="v1-hero">
                 <div className="text-[11px] font-extrabold uppercase tracking-widest text-sky-200">
@@ -290,7 +436,7 @@ export default function App() {
                       <p className="text-xs text-emerald-800">
                         {run
                           ? 'No purchases are waiting for approval. Inspect settled transactions or explore evidence below.'
-                          : 'Set the mandate on the left and click "Run agent" to start procurement.'}
+                          : 'Set the mandate on the left and click "Run agent", or click "Run 10-Stage Showcase" above.'}
                       </p>
                     </div>
                   </div>
@@ -402,6 +548,44 @@ export default function App() {
               )}
               <WebhookInspector live={mode === 'live sandbox'} />
               <DisputeDesk run={run} live={mode === 'live sandbox'} />
+
+              {/* Application Footer */}
+              <footer className="mt-8 border-t border-slate-200 pt-6 text-xs text-slate-500">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="font-bold text-slate-800">PactGuard AI</div>
+                    <p className="mt-0.5 text-slate-500">
+                      Autonomous procurement spend firewall &amp; tamper-evident evidence ledger.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 font-semibold text-slate-600">
+                    <a
+                      href="https://github.com/xandie985/paypal-ai-hackathon"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:text-blue-600 hover:underline"
+                    >
+                      Source Code (GitHub)
+                    </a>
+                    <span>·</span>
+                    <a href="/docs" target="_blank" rel="noreferrer" className="hover:text-blue-600 hover:underline">
+                      REST API Docs
+                    </a>
+                    <span>·</span>
+                    <a href="#/studio" className="hover:text-blue-600 hover:underline">
+                      Command Center
+                    </a>
+                    <span>·</span>
+                    <span className="rounded bg-slate-200/60 px-2 py-0.5 text-[11px] text-slate-700">
+                      Apache-2.0
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-col gap-1 text-[11px] text-slate-400 sm:flex-row sm:justify-between">
+                  <span>Built for the PayPal AI Hackathon 2026 · Agentic Commerce &amp; PayPal + AI</span>
+                  <span>PayPal REST APIs: Orders v2, Payouts v1, Webhooks, Invoicing, Disputes</span>
+                </div>
+              </footer>
             </div>
           </div>
         </div>
