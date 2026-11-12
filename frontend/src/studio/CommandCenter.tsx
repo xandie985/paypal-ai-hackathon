@@ -407,7 +407,7 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
     if (!live) return
     let stopped = false
     const tick = async () => {
-      const engine = apiRef.current?.getDataEngine()
+      const engine = (apiRef.current as unknown as { getDataEngine?: () => { applyTransaction?: (tx: unknown) => Promise<unknown> } })?.getDataEngine?.()
       if (!engine?.applyTransaction || document.hidden || seen.current.size === 0) return
       try {
         const latest = (await api.studioRows(runId, true)).rows
