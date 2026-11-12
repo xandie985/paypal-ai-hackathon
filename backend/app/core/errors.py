@@ -26,6 +26,10 @@ class AmountMismatch(GuardViolation):
     code, handoff = "AMOUNT_MISMATCH", "3->4"
 
 
+class BudgetExceeded(GuardViolation):
+    code, handoff = "BUDGET_EXCEEDED", "3->4"
+
+
 class NotAuthorized(GuardViolation):
     code, handoff = "NOT_AUTHORIZED", "3->4"
 

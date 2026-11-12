@@ -1,6 +1,6 @@
 """Run every evaluation and write eval/RESULTS.md, the table that goes in the README.
 
-    python -m eval.run_all
+python -m eval.run_all
 """
 
 from datetime import UTC, datetime
@@ -19,11 +19,11 @@ def main() -> str:
 Generated {datetime.now(UTC):%Y-%m-%d %H:%M} UTC by `python -m eval.run_all` from `backend/`. Everything runs offline against
 the deterministic replay gateway and simulated sellers, with fixed seeds, so the numbers reproduce exactly.
 
-## Mandate firewall: {fw['scenarios']} scenarios
+## Mandate firewall: {fw["scenarios"]} scenarios
 
 {firewall_cases.table(fw)}
 
-Decision latency: p50 {fw['p50_ms']} ms, worst {fw['max_ms']} ms (deterministic, no LLM in the path).
+Decision latency: p50 {fw["p50_ms"]} ms, worst {fw["max_ms"]} ms (deterministic, no LLM in the path).
 
 Every over-budget, over-cap, non-refundable, off-allowlist, review-first and directly phrased injection scenario was
 routed as intended. **The weak spot is paraphrased prompt injection.** The injection tripwire is a regular-expression
@@ -33,7 +33,7 @@ tripwire, not the safeguard: seller text never changes a route except to block i
 can only auto-settle a purchase that independently passes all four factors (an allowlisted vendor and category,
 return terms, price against baseline, budget and cap). A model-based classifier that may only escalate is the next step.
 
-## Negotiation: {neg['runs']} seeded runs, varied seller parameters
+## Negotiation: {neg["runs"]} seeded runs, varied seller parameters
 
 {negotiation_runs.table(neg)}
 
@@ -42,13 +42,13 @@ strategy against simulated curves and moves with the parameters chosen (here: fl
 does verify independently of those parameters is the gate: no misbehaving seller (non-numeric price, extra fields,
 a price walked back up, wrong quantity) survived to win, and no run committed to more than one seller.
 
-## Idempotency: {idem['retries']} attempts per operation
+## Idempotency: {idem["retries"]} attempts per operation
 
 {idempotency_runs.table(idem)}
 
 The replay gateway reproduces PayPal's `PayPal-Request-Id` behaviour (a repeated id returns the original result).
 The request ids are derived from the lineage, so a retry of the same operation always repeats the same id. A different
-logical operation still goes through: {'yes' if idem['distinct_operation_allowed'] else 'NO'}.
+logical operation still goes through: {"yes" if idem["distinct_operation_allowed"] else "NO"}.
 """
     OUT.write_text(md)
     return md

@@ -52,6 +52,26 @@ class Runtime:
     def spent(self, mandate_lid: str) -> Decimal:
         return sum((Decimal(e.payload["amount"]["value"]) for e in self.ledger.entries(mandate_lid, "capture")), Decimal("0"))
 
+    def committed_spend(self, mandate_lid: str, exclude_lineage_id: str | None = None) -> Decimal:
+        prefix = f"{mandate_lid}."
+        by_lid: dict[str, Decimal] = {}
+        for e in self.ledger.entries(mandate_lid):
+            if exclude_lineage_id and e.lineage_id == exclude_lineage_id:
+                continue
+            if e.lineage_id != mandate_lid and not e.lineage_id.startswith(prefix):
+                continue
+            if e.kind == "seal":
+                val = e.payload["amount"]["value"] if isinstance(e.payload.get("amount"), dict) else e.payload.get("amount")
+                if val is not None:
+                    by_lid[e.lineage_id] = Decimal(str(val))
+            elif e.kind == "capture":
+                val = e.payload["amount"]["value"] if isinstance(e.payload.get("amount"), dict) else e.payload.get("amount")
+                if val is not None:
+                    by_lid[e.lineage_id] = Decimal(str(val))
+            elif e.kind in ("capture_failed", "rejection"):
+                by_lid.pop(e.lineage_id, None)
+        return sum(by_lid.values(), Decimal("0"))
+
 
 DEMO_MANDATE = Mandate(
     principal="ops@acme.example",

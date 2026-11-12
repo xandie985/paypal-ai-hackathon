@@ -136,3 +136,28 @@ def test_route_returns_429_when_limited(monkeypatch):
     monkeypatch.setattr(ai_proxy, "RATE_LIMIT", 1)
     assert client.post("/api/ai/messages", json=BODY).status_code == 200
     assert client.post("/api/ai/messages", json=BODY).status_code == 429
+
+
+def test_rate_limit_bounded_clients(monkeypatch):
+    monkeypatch.setattr(ai_proxy, "MAX_TRACKED_CLIENTS", 5)
+    ai_proxy._hits.clear()
+    for i in range(10):
+        ai_proxy._rate_limited(f"client-{i}", now=100.0)
+    assert len(ai_proxy._hits) <= 5
+    assert "client-9" in ai_proxy._hits
+
+
+def test_client_id_handles_render_proxy_headers():
+    class DummyRequest:
+        def __init__(self, headers, host="10.0.0.1"):
+            self.headers = headers
+            self.client = type("Client", (), {"host": host})()
+
+    req1 = DummyRequest({"render-client-ip": "198.51.100.4", "x-forwarded-for": "203.0.113.1, 10.0.0.1"})
+    assert ai_proxy._client_id(req1) == "198.51.100.4"
+
+    req2 = DummyRequest({"x-forwarded-for": "203.0.113.5, 10.0.0.1"})
+    assert ai_proxy._client_id(req2) == "203.0.113.5"
+
+    req3 = DummyRequest({})
+    assert ai_proxy._client_id(req3) == "10.0.0.1"

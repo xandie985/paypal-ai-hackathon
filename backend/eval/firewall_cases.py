@@ -37,8 +37,15 @@ class Case:
 
 
 def _clean(**kw) -> dict:
-    return {"vendor": "Contoso Retail", "category": "webcams", "sku": "c", "unit_price": Decimal("59"), "quantity": 2, "return_days": 30,
-            "baseline_unit_price": Decimal("94")} | kw
+    return {
+        "vendor": "Contoso Retail",
+        "category": "webcams",
+        "sku": "c",
+        "unit_price": Decimal("59"),
+        "quantity": 2,
+        "return_days": 30,
+        "baseline_unit_price": Decimal("94"),
+    } | kw
 
 
 def cases() -> list[Case]:
