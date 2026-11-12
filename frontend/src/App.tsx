@@ -28,17 +28,18 @@ function useHash() {
 }
 
 const STAGES = [
-  '1 · Mandate',
-  '2 · Discover',
-  '3 · Negotiate',
-  '4 · Firewall',
-  '5 · PayPal',
-  '6 · Review',
+  'Mandate',
+  'Discover',
+  'Negotiate',
+  'Firewall',
+  'PayPal',
+  'Review',
 ]
 
 export default function App() {
   const [mode, setMode] = useState<string>('…')
   const [currentMandate, setCurrentMandate] = useState<MandateInput>(DEFAULTS)
+  const [runMandate, setRunMandate] = useState<MandateInput | null>(null) // what the shown run was started with
   const [demoResult, setDemoResult] = useState<DemoRunResult | null>(null)
   const [demoBusy, setDemoBusy] = useState(false)
   const [showModeModal, setShowModeModal] = useState(false)
@@ -85,7 +86,7 @@ export default function App() {
     }
     if (idx === 2) {
       const hasNeg = events.some((e) => e.stage === '2' && e.event === 'negotiated') || run.items.some((i) => i.method === 'negotiate')
-      return hasNeg ? 'done' : busy ? 'active' : 'done'
+      return hasNeg ? 'done' : busy ? 'active' : ''
     }
     if (idx === 3) {
       return run.items.some((i) => i.decision != null) ? 'done' : busy ? 'active' : ''
@@ -106,7 +107,7 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-slate-50 text-slate-900 ${studio ? 'flex h-dvh flex-col' : ''}`}>
       {/* Top Application Bar */}
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur-md sm:px-6">
+      <header className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-y-2 border-b border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur-md sm:px-6">
         <div className="flex items-center gap-5">
           <a href="#/" className="flex items-center gap-2.5 font-black tracking-tight text-slate-900 no-underline">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-teal-500 text-white shadow-md shadow-blue-500/20">
@@ -145,7 +146,7 @@ export default function App() {
               <svg className="h-3 w-3 text-amber-700" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
               </svg>
-              {heldItems.length} awaiting approval
+              {heldItems.length}<span className="hidden sm:inline"> awaiting approval</span>
             </span>
           )}
 
@@ -183,16 +184,6 @@ export default function App() {
               </>
             )}
           </button>
-
-          <a
-            href="#/studio"
-            className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition hover:border-slate-300 hover:bg-slate-50 sm:flex"
-          >
-            <svg className="h-3.5 w-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
-            Command Center
-          </a>
         </div>
       </header>
 
@@ -259,7 +250,10 @@ export default function App() {
             <aside className="lg:sticky lg:top-20 space-y-4">
               <MandateForm
                 busy={busy}
-                onStart={(m) => start(m)}
+                onStart={(m) => {
+                  setRunMandate(m)
+                  start(m)
+                }}
                 onMandateChange={setCurrentMandate}
               />
             </aside>
@@ -334,7 +328,7 @@ export default function App() {
                   </div>
                   <div className="min-w-[110px] rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 backdrop-blur-xs">
                     <small className="block text-[10px] font-bold uppercase tracking-wider text-sky-200">Auto below</small>
-                    <b className="text-lg font-bold text-white">{money(currentMandate.auto_threshold)}</b>
+                    <b className="text-lg font-bold text-white">{money((run && runMandate ? runMandate : currentMandate).auto_threshold)}</b>
                   </div>
                   <div className="min-w-[110px] rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 backdrop-blur-xs">
                     <small className="block text-[10px] font-bold uppercase tracking-wider text-sky-200">Captured</small>
@@ -532,11 +526,9 @@ export default function App() {
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  Ledger chain OK {run?.ledger_entries ? `(${run.ledger_entries} sealed)` : ''}
+                  {run?.ledger_entries ? `${run.ledger_entries} entries sealed` : 'Evidence ledger'}
                 </span>
-                <span className="text-xs text-slate-500">
-                  Webhook inbox verified + deduplicated
-                </span>
+                <span className="text-xs text-slate-500">{run ? 'Chain status is verified in the ledger panel below.' : 'Run the agent to seal the first entries.'}</span>
                 <div className="ml-auto flex flex-wrap items-center gap-2">
                   {run && <AttackButton runId={run.run_id} onDone={() => act(async () => {})} />}
                   <a

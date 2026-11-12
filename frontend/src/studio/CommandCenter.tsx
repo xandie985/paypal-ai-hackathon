@@ -81,18 +81,25 @@ const fields: AgFieldDefinition[] = [
   percent('dispute_win_odds', 'Dispute win odds', 'The desk\'s estimated odds when it answered this purchase\'s dispute'),
 ]
 
+const LIVE_INTERVALS = [2, 5, 10] as const
+
 const MONEY = ['amount', 'savings', 'payout_net'] as const
 
+type Row = Record<string, string | number | Date | null>
+
+// One ledger row as Studio holds it: money as numbers, timestamps as Dates.
+function toRow(r: StudioRow): Row {
+  const out: Row = { ...r }
+  for (const k of MONEY) out[k] = r[k] == null ? null : Number(r[k])
+  for (const k of DATES) out[k] = out[k] ? new Date(String(out[k])) : null
+  return out
+}
+
 function toSources(rows: StudioRow[], paypal: PaypalTables | null, recon: Reconciliation | null): AgDataSourcesDefinition {
-  const data = rows.map((r) => {
-    const out: Record<string, string | number | Date | null> = { ...r }
-    for (const k of MONEY) out[k] = r[k] == null ? null : Number(r[k])
-    return out
-  })
   // Newest first, so the table grows from the top (the backend already sorts; keep it if rows are merged).
-  data.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-  for (const row of data) for (const k of DATES) row[k] = row[k] ? new Date(String(row[k])) : null
-  const ledger = { id: 'transactions', name: 'Transactions', description: 'One row per purchase lineage', data, fields }
+  const data = rows.map(toRow).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+  // transactions: 'all' lets the live feed add and update rows in place instead of reloading Studio.
+  const ledger = { id: 'transactions', name: 'Transactions', description: 'One row per purchase lineage', data, fields, transactions: 'all' as const, primaryKeyField: 'lineage_id' }
   if (!paypal) {
     return { description: 'PactGuard AI procurement runs: one row per purchase, built from the hash-chained evidence ledger.', sources: [ledger] }
   }
@@ -275,7 +282,9 @@ const reportWith = (paypal: PaypalTables | null, recon: Reconciliation | null, r
   const agent = report.pages ?? []
   const pages = paypal ? [...agent, ...(recon ? [reconcilePage] : []), ...paypalPages] : agent
   const selectedPageId = pages.some((p) => p.id === requestedPageId) ? requestedPageId : 'overview'
-  return { ...report, selectedPageId, pages }
+  // Studio's own panels start stowed so the report is what opens first, as in the AG Studio Report Builder demo.
+  const panels = { ai: { collapsed: true }, filters: { collapsed: true }, edit: { collapsed: true }, data: { collapsed: true } }
+  return { ...report, selectedPageId, pages, panels }
 }
 
 export default function CommandCenter({ runId }: { runId?: string } = {}) {
@@ -297,6 +306,12 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const [pageId, setPageId] = useState(pageFromHash)
   const [liveReportingNotice, setLiveReportingNotice] = useState<string | null>(null)
   const [paypalError, setPaypalError] = useState<string | null>(null)
+  // Live feed: new and changed purchases reach Studio as data transactions, so widgets update without a reload.
+  const [live, setLive] = useState(true)
+  const [liveEvery, setLiveEvery] = useState<(typeof LIVE_INTERVALS)[number]>(LIVE_INTERVALS[1])
+  const [liveUpdates, setLiveUpdates] = useState(0)
+  const [liveError, setLiveError] = useState(false)
+  const seen = useRef(new Map<string, string>()) // lineage_id -> last row sent, to tell new rows from changed ones
 
   const loadRows = useCallback(() => {
     api
@@ -383,6 +398,46 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
   const data = useMemo(() => (rows && paypal !== undefined ? toSources(rows, paypal, recon) : null), [rows, paypal, recon])
   const initialState = useMemo(() => reportWith(paypal ?? null, recon, pageId), [paypal, recon, pageId])
   const ai = useMemo(() => (aiModel ? buildAi(aiModel) : undefined), [aiModel])
+
+  useEffect(() => {
+    if (rows && seen.current.size === 0) for (const r of rows) seen.current.set(r.lineage_id, JSON.stringify(r))
+  }, [rows])
+
+  useEffect(() => {
+    if (!live) return
+    let stopped = false
+    const tick = async () => {
+      const engine = apiRef.current?.getDataEngine()
+      if (!engine?.applyTransaction || document.hidden || seen.current.size === 0) return
+      try {
+        const latest = (await api.studioRows(runId, true)).rows
+        const add: Row[] = []
+        const update: Row[] = []
+        const next = new Map(seen.current)
+        for (const r of latest) {
+          const sig = JSON.stringify(r)
+          const before = next.get(r.lineage_id)
+          if (before === undefined) add.push(toRow(r))
+          else if (before !== sig) update.push(toRow(r))
+          next.set(r.lineage_id, sig)
+        }
+        if (stopped) return
+        if (add.length || update.length) {
+          await engine.applyTransaction({ tableId: 'transactions', ...(add.length ? { add } : {}), ...(update.length ? { update } : {}) })
+          setLiveUpdates((n) => n + add.length + update.length)
+        }
+        seen.current = next // only after Studio accepted it, so a failed batch is retried
+        setLiveError(false)
+      } catch {
+        setLiveError(true)
+      }
+    }
+    const timer = setInterval(tick, liveEvery * 1000)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+    }
+  }, [live, liveEvery, runId])
 
   if (error)
     return (
@@ -559,7 +614,35 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
             </span>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="inline-flex items-center gap-1.5 text-xs" role="status">
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full ${liveError ? 'bg-rose-500' : live ? 'animate-pulse bg-emerald-500' : 'bg-slate-300'}`}
+            />
+            <span className="font-medium text-slate-700">{liveError ? 'Feed error, retrying' : live ? 'Live' : 'Paused'}</span>
+            {liveUpdates > 0 && <span className="text-slate-400">{liveUpdates} update{liveUpdates === 1 ? '' : 's'}</span>}
+          </span>
+          <button
+            className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+            onClick={() => setLive(!live)}
+          >
+            {live ? 'Pause' : 'Resume'}
+          </button>
+          <label className="flex items-center gap-1 text-xs text-slate-500">
+            every
+            <select
+              className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs"
+              value={liveEvery}
+              onChange={(e) => setLiveEvery(Number(e.target.value) as (typeof LIVE_INTERVALS)[number])}
+            >
+              {LIVE_INTERVALS.map((s) => (
+                <option key={s} value={s}>
+                  {s}s
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
             onClick={() => {
@@ -584,6 +667,8 @@ export default function CommandCenter({ runId }: { runId?: string } = {}) {
           <AgStudio
             style={{ height: '100%', width: '100%' }}
             theme={pactguardTheme}
+            layout={{ widgetBorderEnabled: true }}
+            panels={{ edit: { left: ai ? ['ai'] : [], right: ['filters', 'edit', 'data'] }, view: { right: ['filters'] } }}
             data={data}
             initialState={initialState}
             mode={mode}

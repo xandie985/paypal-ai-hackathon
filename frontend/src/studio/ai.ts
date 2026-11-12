@@ -2,7 +2,7 @@
 // app's own proxy (backend/app/ai_proxy.py), which holds the Anthropic key, so nothing secret is sent
 // from the browser.
 
-import { createAiHarness, type AgAiHarnessSetup, type AgAiPromptStarter } from 'ag-studio'
+import { createAiHarness, type AgAiHarnessSetup, type AgAiPromptStarter, type AgStudioApi } from 'ag-studio'
 import { claudeAdapter } from './claudeAdapter'
 
 // What the model needs to know about the data it can query. Field ids and names come from the report's
@@ -50,5 +50,5 @@ const PROMPT_STARTERS: AgAiPromptStarter[] = [
 
 export function buildAi(model: string): AgAiHarnessSetup {
   const adapter = claudeAdapter({ endpoint: '/api/ai', model, system: DOMAIN })
-  return ({ api }) => createAiHarness(api, { adapter, promptStarters: PROMPT_STARTERS })
+  return ({ api }) => createAiHarness(api as AgStudioApi, { adapter, promptStarters: PROMPT_STARTERS })
 }

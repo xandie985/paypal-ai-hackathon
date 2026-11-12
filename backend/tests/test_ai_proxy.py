@@ -49,7 +49,7 @@ class FakeAnthropic:
 @pytest.fixture(autouse=True)
 def configured(monkeypatch):
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
-    monkeypatch.setattr(settings, "llm_model", "claude-3-5-sonnet-latest")
+    monkeypatch.setattr(settings, "llm_model", "claude-haiku-5-5")
     ai_proxy._hits.clear()
 
 
@@ -57,7 +57,7 @@ BODY = {"messages": [{"role": "user", "content": "hi"}], "system": "be brief"}
 
 
 def test_config_reports_whether_the_assistant_is_available(monkeypatch):
-    assert client.get("/api/ai/config").json() == {"configured": True, "model": "claude-3-5-sonnet-latest"}
+    assert client.get("/api/ai/config").json() == {"configured": True, "model": "claude-haiku-5-5"}
     monkeypatch.setattr(settings, "anthropic_api_key", "")
     assert client.get("/api/ai/config").json()["configured"] is False
 
@@ -84,7 +84,7 @@ def test_request_is_pinned_before_it_goes_upstream(monkeypatch):
     }
     assert client.post("/api/ai/messages", json=body).status_code == 200
     (params,) = fake.calls
-    assert params["model"] == "claude-3-5-sonnet-latest"
+    assert params["model"] == "claude-haiku-5-5"
     assert params["max_tokens"] == ai_proxy.MAX_OUTPUT_TOKENS
     assert params["thinking"] == {"type": "disabled"}
     assert params["tool_choice"] == {"type": "auto"}

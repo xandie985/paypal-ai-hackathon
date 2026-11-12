@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     channel3_api_key: str = ""
     channel3_base_url: str = "https://api.trychannel3.com"
     anthropic_api_key: str = ""
-    llm_model: str = "claude-3-5-sonnet-latest"
+    llm_model: str = "claude-haiku-5-5"
     ledger_path: str = "./ledger.db"
     gate_secret: str = "dev-only-gate-secret-change-me"
     # Browser origins allowed to call the API from another host (Vite dev servers). The deployed app serves the
