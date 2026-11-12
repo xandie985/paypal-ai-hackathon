@@ -12,7 +12,7 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
-> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #10, #11). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 162 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Still open: the Render deploy, APIMatic, and the backlog in §6.
+> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #9, #10, #11, #12). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 168 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Still open: the Render deploy, APIMatic, and the backlog in §6.
 
 ---
 
@@ -72,7 +72,7 @@ Every design choice below traces to a paper in doc 02. Doc 09 §7 notes that the
 |---|---|---|
 | Core primitives: ledger, lineage, gates, money | Built, with tests | None |
 | Stages 1–10 | Built. The full arc runs in replay mode. | Stages 5, 6, 7 and 10 are scripted rather than live |
-| Tests | 162 passing (2026-11-12) | None |
+| Tests | 168 passing (2026-11-12) | None |
 | API, [`api.py`](../backend/app/api.py) | `POST /api/demo/run`, `GET /api/ledger`, `/ledger/verify`, `/studio/rows` | **`/demo/run` is one synchronous call.** A UI can't pause for human approval, and a real PayPal order can't wait for buyer approval. This is the first task in Phase 1. |
 | Orchestrator, [`orchestrator.py`](../backend/app/orchestrator.py) | `run_demo` runs the whole arc and calls `asyncio.run(negotiate(...))` | `asyncio.run` can't be called from inside an async endpoint. Negotiation has to be awaited directly. |
 | PayPal client, [`integrations/paypal.py`](../backend/app/integrations/paypal.py) | `SandboxPayPal` covers Orders v2, Invoicing v2, Payouts v1, `provide-evidence` and webhook verify, with OAuth caching | Run live in Phases 0 and 1. Webhook verification now takes the raw body (Phase 3, pain point #11). |
@@ -446,6 +446,7 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 - [x] 4c Evaluation harness `backend/eval/` with `RESULTS.md`, also run as tests. It found paraphrased prompt injection slipping past the regex tripwire; the patterns were widened using the dev phrases only and the held-out catch rate (1 of 5) is reported as a known gap.
 - [x] 4d README rewritten for judges. [ ] Add the live URL after deploying.
 - [~] 4e UI polish sweep: largely done for the Command Center (formats, grouped tabs, hints, provenance chip, loading and error states, drawers, keyboard navigation). Not covered: the Mission Control screens, narrow-viewport checks and dark mode.
+- [x] 4f Core hardening (2026-11-12, PR #9): mandate budget now counts sealed but uncaptured orders (`Runtime.committed_spend`, `BudgetExceeded`), with a 30-minute expiry on an abandoned seal; the assistant proxy bounds its per-client table, keys on Render's proxy headers and has a 300-a-minute global ceiling; a placeholder `GATE_SECRET` is logged; the two eval files are formatted. Known limitations (BUG-2 category collision, BUG-3 tail truncation, held-out injection) are in the README.
 
 ---
 

@@ -22,7 +22,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 ```bash
 make setup      # venv, npm install, copies .env.example to .env
-make test       # 162 tests
+make test       # 168 tests
 make backend    # API on :8000 (REPLAY_MODE=true runs everything offline)
 make frontend   # UI on :5173, in a second terminal
 ```
