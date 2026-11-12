@@ -61,3 +61,4 @@ scratch/
 *.db
 checkpoint*.md
 temp_checkpt*.md
+test.html
