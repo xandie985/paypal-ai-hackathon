@@ -250,3 +250,25 @@ def test_budget_overspend_prevented_across_concurrent_approvals():
     assert r2_retry.status_code == 409
     err2 = r2_retry.json() if "code" in r2_retry.json() else r2_retry.json().get("detail", {})
     assert err2.get("code") == "BUDGET_EXCEEDED"
+
+
+def test_abandoned_seal_stops_holding_budget_but_a_capture_never_does():
+    """A sealed order PayPal never got approved (popup closed) releases its budget after SEAL_HOLD; a capture is spend for good."""
+    from datetime import UTC, datetime
+
+    from app.orchestrator import SEAL_HOLD
+
+    snap = client.post("/api/runs").json()
+    run = runs.RUNS[snap["run_id"]]
+    mon = next(i for i in snap["items"] if i["need"]["category"] == "monitors")
+    base = f"/api/runs/{snap['run_id']}"
+    client.post(f"{base}/decisions/{mon['lineage_id']}/approve")
+    assert client.post(f"{base}/orders/{mon['lineage_id']}/prepare").status_code == 200
+    later = datetime.now(UTC) + SEAL_HOLD * 2
+
+    held = run.rt.committed_spend(run.mandate_lineage)
+    assert held >= 1020  # the sealed monitor order counts (the auto-settled webcam captures may add to it)
+    assert run.rt.committed_spend(run.mandate_lineage, now=later) == held - 1020  # the abandoned seal has expired
+
+    assert client.post(f"{base}/orders/{mon['lineage_id']}/capture").status_code == 200
+    assert run.rt.committed_spend(run.mandate_lineage, now=later) == held  # captured: spend, however long ago

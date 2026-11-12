@@ -1,7 +1,7 @@
 """One web service: the API serves the built frontend, and the run registry behaves on a long-lived server."""
 
 import asyncio
-import warnings
+import logging
 
 import pytest
 from fastapi import FastAPI
@@ -65,13 +65,12 @@ async def test_events_emitted_on_a_worker_thread_reach_an_sse_subscriber():
     assert event["event"] == "from_a_thread"
 
 
-def test_gate_secret_placeholder_warning():
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("always")
+def test_gate_secret_placeholder_warning(caplog):
+    with caplog.at_level(logging.WARNING, logger="pactguard.config"):
         Settings(gate_secret="dev-only-gate-secret-change-me")
-        assert any("GATE_SECRET" in str(w.message) for w in recorded)
+    assert any("GATE_SECRET" in r.message for r in caplog.records)
 
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("always")
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="pactguard.config"):
         Settings(gate_secret="production-secure-random-secret-123456789")
-        assert not any("GATE_SECRET" in str(w.message) for w in recorded)
+    assert not any("GATE_SECRET" in r.message for r in caplog.records)

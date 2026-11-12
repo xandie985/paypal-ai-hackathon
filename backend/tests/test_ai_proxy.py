@@ -131,6 +131,16 @@ def test_rate_limit_applies_per_client_and_resets_with_the_window():
     assert ai_proxy._rate_limited("a", now=100.0 + ai_proxy.RATE_WINDOW_S + 1) is False
 
 
+def test_global_ceiling_holds_when_the_client_key_is_rotated(monkeypatch):
+    monkeypatch.setattr(ai_proxy, "GLOBAL_LIMIT", 5)
+    ai_proxy._hits.clear()
+    ai_proxy._global_hits.clear()
+    # Every request claims a different client, as a caller rotating the proxy header would.
+    assert [ai_proxy._rate_limited(f"spoofed-{i}", now=100.0) for i in range(7)] == [False] * 5 + [True] * 2
+    assert ai_proxy._rate_limited("another", now=100.0 + ai_proxy.RATE_WINDOW_S + 1) is False  # the window slides
+    ai_proxy._global_hits.clear()
+
+
 def test_route_returns_429_when_limited(monkeypatch):
     monkeypatch.setattr(ai_proxy, "_anthropic", lambda: FakeAnthropic())
     monkeypatch.setattr(ai_proxy, "RATE_LIMIT", 1)

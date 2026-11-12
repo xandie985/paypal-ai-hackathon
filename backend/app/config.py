@@ -1,5 +1,4 @@
 import logging
-import warnings
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -68,7 +67,6 @@ class Settings(BaseSettings):
         placeholders = {"dev-only-gate-secret-change-me", "change-me-to-a-long-random-string"}
         if self.gate_secret in placeholders:
             msg = f"GATE_SECRET is set to placeholder '{self.gate_secret}'. Set a secure random secret in production/live environments."
-            warnings.warn(msg, UserWarning, stacklevel=2)
             logger.warning(msg)
         return self
 
