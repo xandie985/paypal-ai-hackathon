@@ -178,6 +178,7 @@ export type Reconciliation = { source: 'live' | 'replay'; asOf: string; rows: Re
 export type PostPurchaseStep = { stage: string; outcome: string; title: string; detail: string }
 export type PostPurchaseResult = { lineage_id: string; scripted_inputs: boolean; steps: PostPurchaseStep[] }
 export type RunEvent = { seq: number; stage: string; event: string; [k: string]: unknown }
+export type NeedInput = { description: string; category: string; quantity: number; method: 'direct' | 'negotiate' }
 export type MandateInput = {
   principal: string
   purpose: string
@@ -286,8 +287,12 @@ const base = (id: string) => `/runs/${id}`
 
 export const api = {
   health: () => call<{ replay_mode: boolean; paypal_live: boolean; sandbox_run_available?: boolean; paypal_client_id?: string | null; currency?: string }>('GET', '/health'),
-  startRun: (mandate?: MandateInput, sandbox = false) =>
-    call<RunSnapshot>('POST', '/runs', { ...(mandate ? { mandate } : {}), ...(sandbox ? { sandbox: true } : {}) }),
+  startRun: (mandate?: MandateInput, sandbox = false, needs?: NeedInput[]) =>
+    call<RunSnapshot>('POST', '/runs', {
+      ...(mandate ? { mandate } : {}),
+      ...(sandbox ? { sandbox: true } : {}),
+      ...(needs ? { needs } : {}),
+    }),
   getRun: (id: string) => call<RunSnapshot>('GET', base(id)),
   approve: (id: string, lid: string) => call<RunSnapshot>('POST', `${base(id)}/decisions/${lid}/approve`, {}),
   reject: (id: string, lid: string) => call<RunSnapshot>('POST', `${base(id)}/decisions/${lid}/reject`, {}),

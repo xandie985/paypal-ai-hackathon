@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { MandateInput } from '../../api/client'
-import { DEFAULTS, PRESET_STRICT } from './defaults'
+import type { MandateInput, NeedInput } from '../../api/client'
+import { DEFAULT_NEEDS, DEFAULTS, PRESET_STRICT } from './defaults'
+
+const MAX_NEEDS = 6
 
 const list = (s: string) =>
   s
@@ -15,12 +17,13 @@ export function MandateForm({
   sandboxAvailable = false,
 }: {
   busy: boolean
-  onStart: (m: MandateInput, sandbox?: boolean) => void
+  onStart: (m: MandateInput, sandbox?: boolean, needs?: NeedInput[]) => void
   sandboxAvailable?: boolean
   onMandateChange?: (m: MandateInput) => void
 }) {
   const [m, setM] = useState<MandateInput>(DEFAULTS)
   const [confirmSandbox, setConfirmSandbox] = useState(false)
+  const [needs, setNeeds] = useState<NeedInput[]>(DEFAULT_NEEDS)
   const [activePreset, setActivePreset] = useState<'office' | 'strict' | null>('office')
   // The two list fields keep what was typed: rebuilding the text from the parsed list would swallow each comma as it is typed.
   const [vendorText, setVendorText] = useState(DEFAULTS.vendor_allowlist.join(', '))
@@ -51,6 +54,14 @@ export function MandateForm({
   if (!Number.isInteger(m.min_return_days) || m.min_return_days < 0) errs.push('Min return days must be a whole number, 0 or more.')
   if (m.vendor_allowlist.length === 0) errs.push('Add at least one vendor to the allowlist.')
   if (m.allowed_categories.length === 0) errs.push('Add at least one allowed category.')
+  if (needs.length === 0) errs.push('Add at least one item to buy.')
+  if (needs.some((n) => !n.description.trim() || !n.category.trim())) errs.push('Every item needs a description and a category.')
+  if (needs.some((n) => !Number.isInteger(n.quantity) || n.quantity < 1 || n.quantity > 25)) errs.push('Quantities must be whole numbers from 1 to 25.')
+  const setNeed = (i: number, patch: Partial<NeedInput>) => setNeeds(needs.map((n, j) => (j === i ? { ...n, ...patch } : n)))
+
+  // Compact fields for the item rows. No width of their own, so each row can size them.
+  const cell =
+    'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100'
 
   const inputClass =
     'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-xs focus:border-indigo-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100'
@@ -61,7 +72,7 @@ export function MandateForm({
       onSubmit={(e) => {
         e.preventDefault()
         if (errs.length === 0 && !busy) {
-          onStart(m)
+          onStart(m, false, needs)
         }
       }}
     >
@@ -222,6 +233,75 @@ export function MandateForm({
         </div>
       </div>
 
+      <div>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-slate-600">What to buy</label>
+          <button
+            type="button"
+            disabled={needs.length >= MAX_NEEDS}
+            onClick={() => setNeeds([...needs, { description: '', category: m.allowed_categories[0] ?? '', quantity: 1, method: 'direct' }])}
+            className="text-xs font-semibold text-indigo-700 hover:underline disabled:opacity-40"
+          >
+            + Add item
+          </button>
+        </div>
+        <ul className="mt-1 space-y-2">
+          {needs.map((n, i) => {
+            const outside = n.category.trim() !== '' && !m.allowed_categories.includes(n.category.trim())
+            return (
+              <li key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    aria-label={`Item ${i + 1} description`}
+                    className={`${cell} min-w-0 flex-1`}
+                    value={n.description}
+                    placeholder="e.g. 27in 4K monitor"
+                    onChange={(e) => setNeed(i, { description: e.target.value })}
+                  />
+                  <input
+                    aria-label={`Item ${i + 1} quantity`}
+                    className={`${cell} w-16 shrink-0 text-center`}
+                    type="number"
+                    min="1"
+                    max="25"
+                    step="1"
+                    value={n.quantity}
+                    onChange={(e) => setNeed(i, { quantity: Number(e.target.value) })}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Remove item ${i + 1}`}
+                    onClick={() => setNeeds(needs.filter((_, j) => j !== i))}
+                    className="rounded px-1.5 text-lg leading-none text-slate-400 hover:text-rose-600"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <input
+                    aria-label={`Item ${i + 1} category`}
+                    className={`${cell} w-full min-w-0`}
+                    value={n.category}
+                    placeholder="category"
+                    onChange={(e) => setNeed(i, { category: e.target.value })}
+                  />
+                  <select
+                    aria-label={`Item ${i + 1} method`}
+                    className={`${cell} w-full min-w-0`}
+                    value={n.method}
+                    onChange={(e) => setNeed(i, { method: e.target.value as NeedInput['method'] })}
+                  >
+                    <option value="direct">Direct buy</option>
+                    <option value="negotiate">Negotiate with sellers</option>
+                  </select>
+                </div>
+                {outside && <p className="mt-1 text-[11px] text-amber-700">Not in the allowed categories: the firewall will block it.</p>}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+
       {errs.length > 0 && (
         <div className="rounded-lg bg-rose-50 p-2.5 text-xs font-medium text-rose-700">
           {errs[0]}
@@ -274,7 +354,7 @@ export function MandateForm({
                   disabled={busy || errs.length > 0}
                   onClick={() => {
                     setConfirmSandbox(false)
-                    onStart(m, true)
+                    onStart(m, true, needs)
                   }}
                   className="rounded-lg bg-amber-600 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
                 >

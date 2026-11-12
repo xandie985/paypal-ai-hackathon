@@ -4,12 +4,13 @@ import threading
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import runs, sandbox_gate
 from .ai_proxy import _client_id
@@ -133,9 +134,16 @@ def history_verify():
 # ---- run sessions ----------------------------------------------------------
 
 
+class NeedInput(BaseModel):
+    description: str = Field(min_length=1, max_length=120)
+    category: str = Field(min_length=1, max_length=60)
+    quantity: int = Field(ge=1, le=25)
+    method: Literal["direct", "negotiate"] = "direct"
+
+
 class StartRun(BaseModel):
     mandate: Mandate | None = None
-    needs: list[dict] | None = None
+    needs: list[NeedInput] | None = Field(default=None, min_length=1, max_length=6)  # None = the demo basket
     sandbox: bool = False  # real PayPal sandbox orders instead of replay; see sandbox_gate
 
 
@@ -179,7 +187,11 @@ async def start_run(request: Request, body: StartRun | None = None):
     try:
         # A live run makes blocking HTTP calls (Channel3, PayPal) for seconds. Running it on a worker thread with
         # its own loop keeps health checks, SSE keepalives and other requests responsive meanwhile.
-        run = await run_in_threadpool(lambda: asyncio.run(runs.start_run(settings, body.mandate, body.needs, sandbox=body.sandbox)))
+        run = await run_in_threadpool(
+            lambda: asyncio.run(
+                runs.start_run(settings, body.mandate, [n.model_dump() for n in body.needs] if body.needs else None, sandbox=body.sandbox)
+            )
+        )
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return run.snapshot()
