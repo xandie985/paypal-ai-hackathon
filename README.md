@@ -85,9 +85,12 @@ backend/
   eval/         the three evaluations
 ```
 
-## Research and planning
+## Architecture & Implementation Documentation
 
-The research behind the project is in [`docs/`](docs/): problem decomposition, the literature, 12 verified user pain points, competitors, the idea ranking, and the implementation and execution plans ([`09`](docs/09-implementation-framework.md) maps every stage and guard to code and a test; [`10`](docs/10-execution-plan.md) is the phased plan and tracker; [`11`](docs/11-dashboard-ui-plan.md) is the UI plan).
+Detailed architecture specifications, execution plans, and UI designs are documented in [`docs/`](docs/):
+- [`09 · Implementation Framework`](docs/09-implementation-framework.md): Maps every procurement stage, deterministic firewall rule, lineage digest, and hand-off guard to code and unit tests.
+- [`10 · Execution Plan`](docs/10-execution-plan.md): Phased engineering roadmap, integration milestones, and validation checklist.
+- [`11 · Dashboard UI Plan`](docs/11-dashboard-ui-plan.md): Mission Control & Command Center UI layout, AG Studio integration, and operator workflows.
 
 ## Credits
 
