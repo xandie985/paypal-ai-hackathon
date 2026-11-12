@@ -262,6 +262,12 @@ def capture(run_id: str, lineage: str):
     return {"capture_id": cap["id"], "status": cap["status"], "amount": cap["amount"]}
 
 
+@router.post("/runs/{run_id}/post-purchase/{lineage}")
+def post_purchase(run_id: str, lineage: str):
+    """Stages 5 to 7 for a settled purchase as one sequence. Carrier and vendor inputs are scripted."""
+    return _guarded(runs.step_post_purchase, _run(run_id), lineage)
+
+
 @router.post("/runs/{run_id}/orders/{lineage}/retry")
 def retry(run_id: str, lineage: str):
     return _guarded(runs.step_retry_order, _run(run_id), lineage)

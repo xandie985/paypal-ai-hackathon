@@ -4,6 +4,7 @@ import { money, pct, short } from '../../lib/format'
 import { RetryButton } from '../attack/Actions'
 import { RouteCard } from '../firewall/FirewallDrawer'
 import { PayPalApprove } from '../settle/PayPalApprove'
+import { PostPurchase } from '../postpurchase/PostPurchase'
 
 const status: Record<string, string> = {
   settled: 'bg-emerald-100 text-emerald-800',
@@ -55,6 +56,7 @@ export function DealCard({ item, runId, busy, onApprove, onReject, onPay, onRefr
           </button>
         )}
       </div>
+      {item.status === 'settled' && <PostPurchase key={item.lineage_id} runId={runId} lineage={item.lineage_id} />}
       {open && item.seal && pu && (
         <div className="grid gap-3 rounded border border-slate-200 p-3 text-xs sm:grid-cols-2">
           <div>

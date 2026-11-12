@@ -156,6 +156,9 @@ export type ReconciliationRow = {
   paypalId: string | null
 }
 export type Reconciliation = { source: 'live' | 'replay'; asOf: string; rows: ReconciliationRow[]; summary: Record<string, number> }
+/** Stages 5 to 7 for one settled purchase (POST /runs/{id}/post-purchase/{lineage}); carrier and vendor inputs are scripted. */
+export type PostPurchaseStep = { stage: string; outcome: string; title: string; detail: string }
+export type PostPurchaseResult = { lineage_id: string; scripted_inputs: boolean; steps: PostPurchaseStep[] }
 export type RunEvent = { seq: number; stage: string; event: string; [k: string]: unknown }
 export type MandateInput = {
   principal: string
@@ -271,6 +274,7 @@ export const api = {
   reject: (id: string, lid: string) => call<RunSnapshot>('POST', `${base(id)}/decisions/${lid}/reject`, {}),
   prepare: (id: string, lid: string) => call<{ order_id: string }>('POST', `${base(id)}/orders/${lid}/prepare`),
   capture: (id: string, lid: string) => call<{ capture_id: string }>('POST', `${base(id)}/orders/${lid}/capture`),
+  postPurchase: (id: string, lid: string) => call<PostPurchaseResult>('POST', `${base(id)}/post-purchase/${lid}`),
   retry: (id: string, lid: string) => call<{ order_id: string; same_order: boolean }>('POST', `${base(id)}/orders/${lid}/retry`),
   attack: (id: string) => call<{ route: string; reasons: string[]; latency_ms: number }>('POST', `${base(id)}/attack`),
   ledger: (id: string) => call<LedgerView>('GET', `${base(id)}/ledger`),

@@ -22,7 +22,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 ```bash
 make setup      # venv, npm install, copies .env.example to .env
-make test       # 159 tests
+make test       # 162 tests
 make backend    # API on :8000 (REPLAY_MODE=true runs everything offline)
 make frontend   # UI on :5173, in a second terminal
 ```
@@ -42,7 +42,7 @@ To use the live sandbox, set `REPLAY_MODE=false` and fill in the PayPal and Chan
 | 1 Delegate, 3 Govern, 4 Settle | Real code. **Live against the PayPal sandbox**: Orders v2, including saved-wallet (vault) capture with no popup, and the PayPal JS SDK approval button for orders that need a person. |
 | 2 Discover | Real code. **Live against Channel3** (`/v1/search`), with a labelled retailer return-policy table because Channel3 does not return return terms. |
 | 2 Negotiate | Real protocol, **simulated sellers**: deterministic concession policies, not merchants or LLMs. |
-| 5 Verify, 6 Reconcile, 7 Payout, 10 Learn | Real code, **scripted inputs** in replay. Delivery proof can be recorded live. The Payouts v1 call has been run against the sandbox. |
+| 5 Verify, 6 Reconcile, 7 Payout, 10 Learn | Real code, **scripted inputs** in replay. Delivery proof can be recorded live. The Payouts v1 call has been run against the sandbox. Mission Control has a **Run post-purchase checks** button on each settled purchase: verify delivery, reconcile the invoice, a spoofed resubmission flagged, a payout the gates refuse, then the payout released. The carrier report and vendor invoices in that sequence are scripted, and in live mode the sandbox payout is not fired from the button. |
 | 7 Webhooks | Real endpoint and raw-body verification, unit-tested. Not yet checked against a real PayPal sandbox event. |
 | 8 Defend | Reads **real sandbox disputes** and answers through PayPal's dispute actions. The multipart `provide-evidence` upload is verified against the replay gateway, not yet against a live case. |
 | 9 Observe | Real. AG Studio over the ledger (`Purchases` and `Agent Activity` pages), with a seeded history of past purchases built through the same step functions. |
