@@ -78,3 +78,12 @@ def test_the_window_slides():
     assert not sandbox_gate.allow("a", 100, now=1010.0)
     assert sandbox_gate.allow("a", 100, now=1000.0 + sandbox_gate.WINDOW_S + 5)
     sandbox_gate.reset()
+
+
+def test_reconciliation_calls_a_real_sandbox_capture_what_it_is(enabled):
+    snap = client.post("/api/runs", json={"sandbox": True}).json()
+    cam = next(i for i in snap["items"] if i["need"]["category"] == "webcams")
+    rows = client.get("/api/studio/reconciliation", params={"run_id": snap["run_id"], "fixture": "true"}).json()["rows"]
+    mine = next(r for r in rows if r["id"] == cam["capture_id"])
+    assert mine["status"] == "Sandbox capture"
+    assert all(r["status"] != "Sandbox capture" for r in rows if r["origin"] == "seeded")

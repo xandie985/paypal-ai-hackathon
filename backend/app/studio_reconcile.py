@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter
 
+from . import runs
 from .api import studio_rows
 from .studio_paypal import FIXTURE_AS_OF, build_tables, fixture_account, studio_paypal
 
@@ -29,6 +30,10 @@ NOTES = {
     "Outside window": "Older than the 31 days Transaction Search covers, so it cannot be checked here.",
     "Unsettled": "No PayPal transaction with this capture ID inside the search window.",
     "Simulated": "A simulated purchase (seeded history or replay): no PayPal object exists for it.",
+    "Sandbox capture": (
+        "A real capture in the PayPal sandbox. This deployment reads a fixed fixture instead of the account, "
+        "so it cannot be matched here; check the sandbox account's Activity."
+    ),
     "Not decided by agent": "A purchase capture in the PayPal account with no agent decision behind it.",
 }
 
@@ -50,6 +55,8 @@ def _agent_row(r: dict, txn: dict | None, source: str, as_of: datetime) -> dict:
         paid = abs(float(txn["amount"]))
         same = amount is not None and abs(paid - amount) <= TOLERANCE and txn.get("currency") in (None, "USD")
         status = "Matched" if same else "Amount mismatch"
+    elif r.get("sandbox") and source == "replay":
+        status = "Sandbox capture"  # real, but the replay fixture cannot contain it
     elif r.get("source") == "seeded" or source == "replay":
         status = "Simulated"
     elif created and created < as_of - SEARCH_WINDOW:
@@ -114,6 +121,7 @@ def summarise(rows: list[dict]) -> dict:
         "matched": count("Matched"),
         "mismatched": count("Amount mismatch"),
         "simulated": count("Simulated"),
+        "sandboxCaptures": count("Sandbox capture"),
         "pending": count("Pending"),
         "unsettled": count("Unsettled"),
         "outsideWindow": count("Outside window"),
@@ -127,5 +135,9 @@ def summarise(rows: list[dict]) -> dict:
 def studio_reconciliation(run_id: str | None = None, fixture: bool = False):
     """Agent captures against the PayPal account ledger. A plain `def`: the live PayPal read blocks."""
     paypal = {"source": "replay", **build_tables(fixture_account(), FIXTURE_AS_OF)} if fixture else studio_paypal()
-    rows = reconcile(studio_rows(run_id, history=True)["rows"], paypal["transactions"], paypal["source"], _when(paypal["asOf"]))
+    agent_rows = studio_rows(run_id, history=True)["rows"]
+    # The row contract is frozen, so a sandbox run is marked here rather than as a Studio column.
+    sandbox = {i.lineage_id for run in runs.RUNS.values() if run.sandbox for i in run.items.values()}
+    agent_rows = [{**r, "sandbox": r["lineage_id"] in sandbox} for r in agent_rows]
+    rows = reconcile(agent_rows, paypal["transactions"], paypal["source"], _when(paypal["asOf"]))
     return {"source": paypal["source"], "asOf": paypal["asOf"], "rows": rows, "summary": summarise(rows)}

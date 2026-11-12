@@ -102,3 +102,17 @@ def test_endpoint_over_the_replay_fixture():
     assert [r["id"] for r in orphans] == ["TXN-FIXT-0007"] and orphans[0]["lineageId"] is None
     assert body == client.get("/api/studio/reconciliation").json()
     assert client.get("/api/studio/reconciliation?fixture=true").json()["rows"] == body["rows"]
+
+
+def test_a_real_sandbox_capture_is_not_called_simulated_in_a_replay_deployment():
+    sb = {**agent("REAL1", "14.00"), "sandbox": True}
+    rows = reconcile([sb, agent("CAP-000001", "10.00")], [], "replay", AS_OF)
+    by = {r["id"]: r for r in rows}
+    assert by["REAL1"]["status"] == "Sandbox capture" and by["CAP-000001"]["status"] == "Simulated"
+    assert summarise(rows)["sandboxCaptures"] == 1
+
+
+def test_a_sandbox_capture_still_matches_when_paypal_is_read_live():
+    sb = {**agent("REAL1", "14.00"), "sandbox": True}
+    rows = reconcile([sb], [txn("REAL1", "14.00", event="Pre-approved payment")], "live", AS_OF)
+    assert rows[0]["status"] == "Matched"
