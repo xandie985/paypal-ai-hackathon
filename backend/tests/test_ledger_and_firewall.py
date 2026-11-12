@@ -31,6 +31,46 @@ def test_ledger_detects_tampering(tmp_path):
     assert EvidenceLedger(path).verify() == (False, 2)
 
 
+def test_ledger_detects_tail_truncation(tmp_path):
+    path = str(tmp_path / "l.db")
+    secret = "test-gate-secret"
+    led = EvidenceLedger(path, secret=secret)
+    for i in range(3):
+        led.append("L", "1", "k", {"i": i})
+    assert led.verify() == (True, None)
+
+    # An attacker drops the delete trigger and deletes the newest entry (tail truncation)
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TRIGGER no_delete")
+    raw.execute("DELETE FROM entries WHERE seq=3")
+    raw.commit()
+
+    tampered = EvidenceLedger(path, secret=secret)
+    ok, bad_seq = tampered.verify()
+    assert ok is False
+    assert bad_seq == 2
+
+
+def test_ledger_external_checkpoint_anchor(tmp_path):
+    path = str(tmp_path / "l.db")
+    secret = "test-gate-secret"
+    led = EvidenceLedger(path, secret=secret)
+    for i in range(2):
+        led.append("L", "1", "k", {"i": i})
+    cp = led.checkpoint()
+    assert cp["seq"] == 2
+    assert led.verify(checkpoint=cp) == (True, None)
+
+    # If the database is truncated or rewound, verification against the external checkpoint fails
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TRIGGER no_delete")
+    raw.execute("DELETE FROM entries WHERE seq=2")
+    raw.commit()
+
+    tampered = EvidenceLedger(path, secret=secret)
+    assert tampered.verify(checkpoint=cp) == (False, 1)
+
+
 def _p(**kw):
     base = dict(
         lineage_id="L.1",

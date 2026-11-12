@@ -49,9 +49,18 @@ def ledger(lineage: str | None = None, kind: str | None = None):
     return [e.__dict__ for e in runtime().ledger.entries(lineage, kind)]
 
 
+@router.get("/ledger/checkpoint")
+def ledger_checkpoint():
+    """Returns an HMAC-signed head anchor of the current ledger state."""
+    return runtime().ledger.checkpoint(settings.gate_secret)
+
+
 @router.get("/ledger/verify")
-def ledger_verify():
-    ok, bad = runtime().ledger.verify()
+def ledger_verify(checkpoint_seq: int | None = None, checkpoint_hash: str | None = None, signature: str | None = None):
+    cp = None
+    if checkpoint_seq is not None and checkpoint_hash is not None and signature is not None:
+        cp = {"seq": checkpoint_seq, "head_hash": checkpoint_hash, "signature": signature}
+    ok, bad = runtime().ledger.verify(secret=settings.gate_secret, checkpoint=cp)
     return {"chain_ok": ok, "first_bad_seq": bad}
 
 

@@ -272,3 +272,34 @@ def test_abandoned_seal_stops_holding_budget_but_a_capture_never_does():
 
     assert client.post(f"{base}/orders/{mon['lineage_id']}/capture").status_code == 200
     assert run.rt.committed_spend(run.mandate_lineage, now=later) == held  # captured: spend, however long ago
+
+
+@pytest.mark.asyncio
+async def test_multiple_negotiated_needs_in_same_category_do_not_collide():
+    from decimal import Decimal
+
+    from app.config import Settings
+    from app.domain.models import Mandate
+
+    settings = Settings(replay_mode=True)
+    mandate = Mandate(
+        principal="test@example.com",
+        purpose="Dual monitor procurement",
+        budget=Decimal("4000"),
+        auto_threshold=Decimal("300"),
+        per_txn_cap=Decimal("2000"),
+        vendor_allowlist=["Northwind Displays", "Contoso Retail", "Fabrikam Outlet"],
+        allowed_categories=["monitors"],
+        min_return_days=14,
+        mode="auto",
+    )
+    needs = [
+        {"description": "27in 4K monitor", "category": "monitors", "quantity": 1, "method": "negotiate"},
+        {"description": "34in ultrawide monitor", "category": "monitors", "quantity": 1, "method": "negotiate"},
+    ]
+    run = await runs.start_run(settings, mandate, needs)
+    assert len(run.items) == 2
+    lids = list(run.items.keys())
+    assert lids[0] != lids[1]
+    assert lids[0].startswith(run.mandate_lineage)
+    assert lids[1].startswith(run.mandate_lineage)
