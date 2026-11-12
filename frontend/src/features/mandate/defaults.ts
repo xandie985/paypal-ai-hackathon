@@ -1,4 +1,4 @@
-import type { MandateInput } from '../../api/client'
+import type { MandateInput, NeedInput } from '../../api/client'
 
 export const DEFAULTS: MandateInput = {
   principal: 'ops@acme.example',
@@ -32,3 +32,9 @@ export const PRESET_STRICT: MandateInput = {
   mode: 'review_first',
 }
 
+// The basket the demo opens with. The microphone's merchant hides its return terms, so it routes to a human.
+export const DEFAULT_NEEDS: NeedInput[] = [
+  { description: '1080p webcam newegg', category: 'webcams', quantity: 2, method: 'direct' },
+  { description: '27in 4K monitor', category: 'monitors', quantity: 3, method: 'negotiate' },
+  { description: 'USB condenser microphone', category: 'microphones', quantity: 1, method: 'direct' },
+]

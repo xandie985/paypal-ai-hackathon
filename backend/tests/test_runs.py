@@ -320,3 +320,28 @@ async def test_multiple_negotiated_needs_in_same_category_do_not_collide():
     assert lids[0] != lids[1]
     assert lids[0].startswith(run.mandate_lineage)
     assert lids[1].startswith(run.mandate_lineage)
+
+
+def test_user_chosen_needs_set_what_is_bought():
+    needs = [
+        {"description": "1080p webcam newegg", "category": "webcams", "quantity": 1, "method": "direct"},
+        {"description": "USB condenser microphone", "category": "microphones", "quantity": 4, "method": "direct"},
+    ]
+    snap = client.post("/api/runs", json={"needs": needs}).json()
+    assert [(i["need"]["category"], i["need"]["quantity"]) for i in snap["items"]] == [("webcams", 1), ("microphones", 4)]
+    assert snap["items"][1]["offer"]["quantity"] == 4
+
+
+@pytest.mark.parametrize(
+    "needs",
+    [
+        [],
+        [{"description": "x", "category": "webcams", "quantity": 0}],
+        [{"description": "x", "category": "webcams", "quantity": 26}],
+        [{"description": "", "category": "webcams", "quantity": 1}],
+        [{"description": "x", "category": "webcams", "quantity": 1, "method": "steal"}],
+        [{"description": "x", "category": "webcams", "quantity": 1}] * 7,
+    ],
+)
+def test_bad_needs_are_refused(needs):
+    assert client.post("/api/runs", json={"needs": needs}).status_code == 422

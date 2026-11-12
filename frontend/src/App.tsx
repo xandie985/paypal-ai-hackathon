@@ -255,9 +255,9 @@ export default function App() {
               <MandateForm
                 busy={busy}
                 sandboxAvailable={sandboxAvailable}
-                onStart={(m, sandbox) => {
+                onStart={(m, sandbox, needs) => {
                   setRunMandate(m)
-                  start(m, sandbox)
+                  start(m, sandbox, needs)
                 }}
                 onMandateChange={setCurrentMandate}
               />
@@ -520,15 +520,12 @@ export default function App() {
                 </section>
               )}
 
-              {/* 2-Column Analytics & Telemetry */}
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-4">
-                  <Timeline events={events} />
-                </div>
-                <div className="space-y-4">
-                  <NegotiationArena events={events} />
-                  <MarketPanel events={events} />
-                </div>
+              {/* Telemetry: the negotiation table needs the full width; the timeline and the product cards sit side by side
+                  on wide screens and stack on narrow ones. */}
+              <NegotiationArena events={events} />
+              <div className="grid items-start gap-4 xl:grid-cols-2">
+                <Timeline events={events} />
+                <MarketPanel events={events} />
               </div>
 
               {/* System & Security Strip */}

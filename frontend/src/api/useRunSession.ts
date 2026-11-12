@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, ApiError, type MandateInput, type RunEvent, type RunSnapshot } from './client'
+import { api, ApiError, type MandateInput, type NeedInput, type RunEvent, type RunSnapshot } from './client'
 
 export function useRunSession() {
   const [run, setRun] = useState<RunSnapshot | null>(null)
@@ -36,10 +36,10 @@ export function useRunSession() {
 
   const refresh = useCallback(async (id: string) => setRun(await api.getRun(id)), [])
 
-  const start = (mandate?: MandateInput, sandbox = false) =>
+  const start = (mandate?: MandateInput, sandbox = false, needs?: NeedInput[]) =>
     guard(async () => {
       setEvents([])
-      setRun(await api.startRun(mandate, sandbox))
+      setRun(await api.startRun(mandate, sandbox, needs))
     })
 
   const act = (fn: (id: string) => Promise<unknown>) =>
