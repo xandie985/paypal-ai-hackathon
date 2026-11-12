@@ -26,7 +26,7 @@ RATE_WINDOW_S = 60.0
 MAX_TRACKED_CLIENTS = 1024
 # A ceiling on all clients together. The per-client key comes from proxy headers a caller can set, so it alone cannot
 # bound spend: rotating that header would otherwise reset the limit.
-GLOBAL_LIMIT = 300
+GLOBAL_LIMIT = 30
 
 _ALLOWED_FIELDS = ("system", "messages", "tools", "tool_choice", "max_tokens")
 _hits: dict[str, deque[float]] = {}

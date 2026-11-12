@@ -123,7 +123,10 @@ def test_non_object_json_is_400(monkeypatch):
     assert client.post("/api/ai/messages", json=["not", "an", "object"]).status_code == 400
 
 
-def test_rate_limit_applies_per_client_and_resets_with_the_window():
+def test_rate_limit_applies_per_client_and_resets_with_the_window(monkeypatch):
+    monkeypatch.setattr(ai_proxy, "GLOBAL_LIMIT", 10_000)  # isolate the per-client limit from the global ceiling
+    ai_proxy._hits.clear()
+    ai_proxy._global_hits.clear()
     for i in range(ai_proxy.RATE_LIMIT):
         assert ai_proxy._rate_limited("a", now=100.0 + i * 0.01) is False
     assert ai_proxy._rate_limited("a", now=101.0) is True

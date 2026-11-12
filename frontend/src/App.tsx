@@ -55,6 +55,19 @@ export default function App() {
         </main>
       ) : (
         <main className="mx-auto max-w-5xl space-y-4 p-6">
+          {!run && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">An AI buyer that can spend your money, and can't be talked into overspending it.</p>
+              <p className="mt-1">
+                PactGuard gives a shopping agent a mandate (a budget and rules), lets it negotiate with vendors, and puts every
+                purchase through a firewall, a human-approval gate and a tamper-evident ledger before PayPal moves any money.
+              </p>
+              <p className="mt-2 text-slate-500">
+                Start here: set the mandate below and press <b>Run agent</b>. Then approve the held purchase, run the post-purchase
+                checks, and open <b>Command Center</b> for the PayPal view.
+              </p>
+            </section>
+          )}
           <MandateForm busy={busy} onStart={(m) => start(m)} />
           {error && <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">Refused: {error}</p>}
           {run && (

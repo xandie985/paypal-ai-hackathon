@@ -66,3 +66,18 @@ def test_each_purchase_is_paid_once_per_run_independently():
     for lid in (items["webcams"]["lineage_id"], mon):
         out = client.post(f"{base}/post-purchase/{lid}").json()
         assert out["steps"][-1]["outcome"] == "released"  # the second invoice isn't a "duplicate" of the first purchase's
+
+
+def test_two_purchases_from_one_vendor_get_distinct_invoice_numbers():
+    """Webcam and microphone are both Contoso: the second clean invoice must not read as a duplicate of the first."""
+    run_id, items = _settled()
+    base = f"/api/runs/{run_id}"
+    mic = items["microphones"]
+    client.post(f"{base}/decisions/{mic['lineage_id']}/approve")
+    assert client.post(f"{base}/orders/{mic['lineage_id']}/prepare").status_code == 200
+    assert client.post(f"{base}/orders/{mic['lineage_id']}/capture").status_code == 200
+    pair = [items["webcams"], mic]
+    assert len({runs.RUNS[run_id].item(i["lineage_id"]).offer.seller_id for i in pair}) == 1  # same vendor
+    for i in pair:
+        body = client.post(f"{base}/post-purchase/{i['lineage_id']}").json()
+        assert [s["outcome"] for s in body["steps"]] == ["PASS", "CLEAN", "FLAGGED", "refused", "released"]

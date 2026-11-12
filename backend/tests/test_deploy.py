@@ -74,3 +74,11 @@ def test_gate_secret_placeholder_warning(caplog):
     with caplog.at_level(logging.WARNING, logger="pactguard.config"):
         Settings(gate_secret="production-secure-random-secret-123456789")
     assert not any("GATE_SECRET" in r.message for r in caplog.records)
+
+
+def test_live_mode_refuses_the_placeholder_gate_secret():
+    import pytest
+
+    with pytest.raises(ValueError, match="GATE_SECRET"):
+        Settings(gate_secret="dev-only-gate-secret-change-me", replay_mode=False)
+    Settings(gate_secret="production-secure-random-secret-123456789", replay_mode=False)
