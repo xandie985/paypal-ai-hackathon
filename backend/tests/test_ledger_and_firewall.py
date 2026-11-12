@@ -48,7 +48,7 @@ def test_ledger_detects_tail_truncation(tmp_path):
     tampered = EvidenceLedger(path, secret=secret)
     ok, bad_seq = tampered.verify()
     assert ok is False
-    assert bad_seq == 2
+    assert bad_seq == 3  # the newest checkpoint points at an entry that is gone
 
 
 def test_ledger_external_checkpoint_anchor(tmp_path):
@@ -68,7 +68,41 @@ def test_ledger_external_checkpoint_anchor(tmp_path):
     raw.commit()
 
     tampered = EvidenceLedger(path, secret=secret)
-    assert tampered.verify(checkpoint=cp) == (False, 1)
+    assert tampered.verify(checkpoint=cp) == (False, 2)
+
+
+def test_old_external_anchor_still_holds_after_the_ledger_grows():
+    led = EvidenceLedger(":memory:", secret="s")
+    led.append("L", "1", "k", {"i": 0})
+    cp = led.checkpoint()
+    for i in range(3):
+        led.append("L", "1", "k", {"i": i + 1})
+    assert led.verify(checkpoint=cp) == (True, None)
+
+
+def test_external_anchor_must_be_signed_and_genuine():
+    led = EvidenceLedger(":memory:", secret="s")
+    led.append("L", "1", "k", {})
+    cp = led.checkpoint()
+    assert led.verify(checkpoint={**cp, "signature": ""})[0] is False  # unsigned proves nothing
+    assert led.verify(checkpoint={**cp, "head_hash": "0" * 64})[0] is False  # edited anchor
+    assert led.verify(secret="another-key", checkpoint=cp)[0] is False  # signed under a different key
+
+
+def test_rotated_secret_is_not_read_as_tampering():
+    path = ":memory:"
+    led = EvidenceLedger(path, secret="old")
+    led.append("L", "1", "k", {})
+    assert led.verify(secret="new") == (True, None)  # stored checkpoints under the old key are ignored
+
+
+def test_stored_checkpoint_catches_truncation_it_survives():
+    led = EvidenceLedger(":memory:", secret="s")
+    for i in range(3):
+        led.append("L", "1", "k", {"i": i})
+    led._conn.execute("DROP TRIGGER no_delete")
+    led._conn.execute("DELETE FROM entries WHERE seq=3")
+    assert led.verify() == (False, 3)
 
 
 def _p(**kw):

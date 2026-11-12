@@ -22,7 +22,7 @@ Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com/)
 
 ```bash
 make setup      # venv, npm install, copies .env.example to .env
-make test       # 175 tests
+make test       # 179 tests
 make backend    # API on :8000 (REPLAY_MODE=true runs everything offline)
 make frontend   # UI on :5173, in a second terminal
 ```
@@ -97,4 +97,5 @@ The Command Center's PayPal pages (Revenue, Receivables, Cash, Catalogue), their
 
 - **Held-out prompt injection paraphrasing:** The prompt-injection firewall currently relies on regex tripwires. While it catches 100% of direct phrasings and known evasion attacks with sub-millisecond deterministic latency, novel paraphrases can evade regex detection. Because untrusted text can only escalate to a human or block (it can never force an auto-settle), this cannot cause an unauthorized spend, but an escalate-only structured LLM classifier is planned to close the paraphrase gap.
 - **Budget holds on sealed orders:** an order that is sealed but not yet captured counts against the mandate budget, so two approvals cannot overspend it. If a buyer closes the PayPal popup, that hold expires after 30 minutes (`SEAL_HOLD`); until then it can block a later purchase in the same run. Capture re-checks the budget, so an order whose hold lapsed cannot be captured over budget. A captured order is spend for good.
+- **Ledger truncation needs an anchor kept elsewhere:** the hash chain and the database triggers catch edits and deletions in the middle. Every append is also signed with `GATE_SECRET` (`checkpoints` table), which catches a truncation that leaves that table alone; someone who can alter the database file can alter both. Fetch `GET /api/ledger/checkpoint` and keep it off the machine, then pass it to `GET /api/ledger/verify` to detect any rewrite or truncation behind it, however far the ledger has grown since. Rotating `GATE_SECRET` makes old checkpoints unverifiable, not the chain broken.
 - **Assistant rate limit:** requests are limited per client (40 a minute), keyed on proxy headers a caller can set, and also by a global ceiling of 30 a minute across all clients. A caller rotating the header can therefore not exceed the ceiling, but heavy shared use could hit it.
