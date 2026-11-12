@@ -57,7 +57,7 @@ Register `https://<service>/api/webhooks/paypal` as a webhook in the sandbox app
 
 Set `ALLOW_SANDBOX_RUNS=true`, the PayPal client id and secret, and `PAYPAL_VAULT_ID`, and Mission Control shows **Run in PayPal sandbox** under the mandate, behind a confirmation. That one run creates real orders and captures in the project's sandbox, charged to the saved wallet; held purchases are paid from the same wallet after approval, with no popup. The rest of the deployment stays in replay.
 
-Guards: off by default; a run's budget is capped (`SANDBOX_RUN_BUDGET_CAP`, 2500 USD); 3 runs an hour per visitor and `SANDBOX_RUNS_PER_HOUR` overall; the vault id never reaches the browser or the ledger. It is test money but it is your sandbox, so leave it off on a public deployment unless you want visitors spending it. Payout stays scripted in a sandbox run.
+Guards: off by default; a run's budget is capped (`SANDBOX_RUN_BUDGET_CAP`, 2500 USD); 3 runs an hour per visitor and `SANDBOX_RUNS_PER_HOUR` overall; the vault id never reaches the browser or the ledger. It is test money but it is your sandbox, so leave it off on a public deployment unless you want visitors spending it. Payout stays scripted in a sandbox run. On a replay deployment the Command Center reads the fixed PayPal fixture, so a sandbox run's captures appear on the Reconciliation page as **Sandbox capture** (real, but not matchable there); check them in the sandbox account's Activity, or run live to see them matched.
 
 ## Verifying a deployment
 

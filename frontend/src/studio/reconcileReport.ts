@@ -8,7 +8,7 @@ import { at, countd, fields, kpi, sum, title } from './paypalReport'
 const R = 'reconciliation'
 const col = (id: string) => `${R}.${id}`
 
-export const RECONCILIATION_STATUSES = ['Matched', 'Amount mismatch', 'Pending', 'Outside window', 'Unsettled', 'Simulated', 'Not decided by agent']
+export const RECONCILIATION_STATUSES = ['Matched', 'Amount mismatch', 'Pending', 'Outside window', 'Unsettled', 'Simulated', 'Sandbox capture', 'Not decided by agent']
 
 type AgDataSource = NonNullable<AgDataSourcesDefinition['sources']>[number]
 
@@ -18,7 +18,7 @@ export const reconcileSource = (data: Reconciliation): AgDataSource => ({
   description:
     'One row per captured agent purchase, matched to the PayPal account ledger by capture ID, plus purchase captures PayPal shows that the agent never decided. ' +
     '"Status": Matched (same amount), Amount mismatch, Pending (captured in the last few hours, Transaction Search may lag), Outside window (older than the 31 days Transaction Search covers), ' +
-    'Unsettled (no PayPal transaction inside the window), Simulated (seeded history or replay: no PayPal object exists) or Not decided by agent. Amounts are positive here; agent amount is what the ledger sealed, PayPal amount is what PayPal shows.',
+    'Unsettled (no PayPal transaction inside the window), Simulated (seeded history or replay: no PayPal object exists), Sandbox capture (a real sandbox payment this fixture-reading deployment cannot match) or Not decided by agent. Amounts are positive here; agent amount is what the ledger sealed, PayPal amount is what PayPal shows.',
   data: data.rows,
   fields: fields([
     ['id', 'Capture ID', 'textFormat'],
