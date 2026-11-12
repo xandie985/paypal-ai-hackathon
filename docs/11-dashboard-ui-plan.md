@@ -94,7 +94,7 @@ Audited on 2026-11-01 against commit `59e0884`.
 | Styling | Hard-coded Tailwind palette classes (slate, indigo, emerald, amber, rose) in every component | No tokens and no dark mode. Colour meanings are repeated in each file. |
 | Components | `MandateForm`, `SummaryStrip`, `MarketPanel`, `NegotiationArena`, `DealCard` + `RouteCard`, `PayPalApprove` (replay only), `AttackButton`, `RetryButton`, `LedgerPanel`, `Timeline` | They work and cover Phase 1, but they're dense tables. There's no visual story, no motion, and no drawer for the approval moment. |
 | Data plumbing | `useRunSession` handles SSE, the snapshot and the 409 guard | Good. Keep it. |
-| AG Studio | Installed (3.0.0) and licensed. B-6 closed on 2026-11-01. `#/studio` is a lazy route over `/api/studio/rows` (UI-0.4). | The spike is done. Next comes the data contract (§8) and the full theme (UI-2.4). |
+| AG Studio | Installed (3.1.0 since 2026-11-12; was 3.0.0) and licensed. B-6 closed on 2026-11-01. `#/studio` is a lazy route over `/api/studio/rows` (UI-0.4). | The spike is done. Next comes the data contract (§8) and the full theme (UI-2.4). |
 | Studio data | `GET /api/studio/rows` returns one flat table plus KPIs, with `created_at` / `updated_at` (newest first), `source` (run or seeded) and a frozen column contract (`s09_observe.ROW_COLUMNS`). `?history=true` adds ~60 seeded purchases over 28 days. | The multi-table model (§8, `GET /api/studio/sources`) is still to do |
 | AI | `integrations/llm.py` (Claude) exists on the backend. No browser-facing AI route. | We need a Claude adapter and a FastAPI proxy (§10) |
 
