@@ -485,6 +485,17 @@ export default function App() {
               {/* Summary KPIs & Stats */}
               {run && <SummaryStrip run={run} />}
 
+              {/* Discovery (wide, one scrolling row per item type) beside the run's activity stream (narrow, scrolls
+                  vertically inside the discovery panel's height). Stacks on small screens. */}
+              {run && (
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+                  <MarketPanel events={events} />
+                  <div className="relative h-72 xl:sticky xl:top-20 xl:h-[calc(100dvh-7rem)] xl:min-h-[20rem] xl:self-start">
+                    <Timeline events={events} className="absolute inset-0" />
+                  </div>
+                </div>
+              )}
+
               {/* Deals, Firewall & Settlement */}
               {run && (
                 <section className="space-y-3">
@@ -520,13 +531,7 @@ export default function App() {
                 </section>
               )}
 
-              {/* Telemetry: the negotiation table needs the full width; the timeline and the product cards sit side by side
-                  on wide screens and stack on narrow ones. */}
               <NegotiationArena events={events} />
-              <div className="grid items-start gap-4 xl:grid-cols-2">
-                <Timeline events={events} />
-                <MarketPanel events={events} />
-              </div>
 
               {/* System & Security Strip */}
               <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs">
