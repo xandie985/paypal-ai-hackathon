@@ -92,7 +92,7 @@ export function MandateForm({
             className={inputClass}
             type="number"
             min="1"
-            step="10"
+            step="any"
             value={m.budget}
             onChange={(e) => {
               setActivePreset(null)
@@ -106,7 +106,7 @@ export function MandateForm({
             className={inputClass}
             type="number"
             min="0"
-            step="10"
+            step="any"
             value={m.auto_threshold}
             onChange={(e) => {
               setActivePreset(null)
@@ -123,7 +123,7 @@ export function MandateForm({
             className={inputClass}
             type="number"
             min="1"
-            step="10"
+            step="any"
             value={m.per_txn_cap}
             onChange={(e) => {
               setActivePreset(null)
