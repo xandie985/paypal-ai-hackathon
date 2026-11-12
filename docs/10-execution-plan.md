@@ -12,7 +12,7 @@ The UI and dashboard work for every phase is in [doc 11](11-dashboard-ui-plan.md
 
 > **Progress (2026-11-06):** Phase 0 and Phase 1 are closed. Stage 8 from Phase 3 (the dispute desk) is done early and verified live, including a full return-refund lifecycle. **Phase 2 starts now.** Status and open items: [doc 09 Phase close-out](09-implementation-framework.md#-phase-close-out-2026-11-06).
 
-> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #9, #10, #11, #12, #13, #14). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 175 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Render is deployed live at https://pactguard-ai.onrender.com, APIMatic payload validation is recorded, and core hardening closed category collisions and tail truncation. Details: §6.
+> **Progress (2026-11-12):** Phases 2, 3 and 4 are built and merged to `main` (PRs #4, #5, #8, #9, #10, #11, #12, #13, #14). The Command Center grew from one flat table into a seven-page AG Studio report: **Agent** (`Purchases`, `Agent Activity`, `Reconciliation`) and **PayPal account** (`Revenue`, `Receivables`, `Cash`, `Catalogue`), with PayPal and lineage detail drawers joined on `capture_id`. See the Phase 2 addendum below. 179 tests pass. The live PayPal read is verified against the real sandbox (§6). Mission Control also has a one-button post-purchase sequence for stages 5 to 7. Render is deployed live at https://pactguard-ai.onrender.com, APIMatic payload validation is recorded, and core hardening closed category collisions and tail truncation. Details: §6.
 
 ---
 
@@ -72,7 +72,7 @@ Every design choice below traces to a paper in doc 02. Doc 09 §7 notes that the
 |---|---|---|
 | Core primitives: ledger, lineage, gates, money | Built, with tests | None |
 | Stages 1–10 | Built. The full arc runs in replay mode. | Stages 5, 6, 7 and 10 are scripted rather than live |
-| Tests | 175 passing (2026-11-12) | None |
+| Tests | 179 passing (2026-11-12) | None |
 | API, [`api.py`](../backend/app/api.py) | `POST /api/demo/run`, `GET /api/ledger`, `/ledger/verify`, `/studio/rows` | **`/demo/run` is one synchronous call.** A UI can't pause for human approval, and a real PayPal order can't wait for buyer approval. This is the first task in Phase 1. |
 | Orchestrator, [`orchestrator.py`](../backend/app/orchestrator.py) | `run_demo` runs the whole arc and calls `asyncio.run(negotiate(...))` | `asyncio.run` can't be called from inside an async endpoint. Negotiation has to be awaited directly. |
 | PayPal client, [`integrations/paypal.py`](../backend/app/integrations/paypal.py) | `SandboxPayPal` covers Orders v2, Invoicing v2, Payouts v1, `provide-evidence` and webhook verify, with OAuth caching | Run live in Phases 0 and 1. Webhook verification now takes the raw body (Phase 3, pain point #11). |

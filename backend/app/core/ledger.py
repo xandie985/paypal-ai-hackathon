@@ -133,47 +133,49 @@ class EvidenceLedger:
         found = self.entries(lineage_id, kind)
         return found[-1] if found else None
 
+    def _signed(self, seq: int, head_hash: str, signature: str, secret: str | None) -> bool:
+        return bool(secret and signature) and hmac.compare_digest(signature, _sign_head(seq, head_hash, secret))
+
+    def _holds(self, seq: int, head_hash: str) -> bool:
+        """True if this ledger contains the entry `head_hash` at `seq`: an anchor may be older than the head."""
+        if seq == 0:
+            return head_hash == GENESIS
+        row = self._conn.execute("SELECT entry_hash FROM entries WHERE seq = ?", (seq,)).fetchone()
+        return bool(row) and row[0] == head_hash
+
     def verify(self, secret: str | None = None, checkpoint: dict | None = None) -> tuple[bool, int | None]:
-        """Recompute the chain and verify against head checkpoints. Returns (ok, first_bad_seq)."""
+        """Recompute the chain, then check it against head anchors. Returns (ok, first_bad_seq).
+
+        An anchor says "this ledger once had entry H at seq N", so it holds for any ledger that still contains that
+        entry, however far it has grown since. Truncation or a rewrite behind the anchor fails it.
+        - `checkpoint`: an anchor the caller kept elsewhere. It must carry a valid signature, or it proves nothing.
+        - the stored checkpoints: the newest one whose signature verifies. Rows signed under another secret (the key
+          was rotated) are ignored rather than read as tampering; the chain itself is still fully checked.
+        Stored checkpoints share the database's trust boundary, so on their own they only catch a truncation that left
+        them in place. An anchor kept off-machine is what covers the rest."""
         sec = secret or self._secret
         prev = GENESIS
-        count = 0
-        head_hash = GENESIS
         for r in self._conn.execute("SELECT * FROM entries ORDER BY seq"):
             e = self._row(r)
             if (
                 e.prev_hash != prev
-                or sha256_hex(canonical_json(e.payload).encode()) != e.payload_hash
-                or _entry_hash(e.seq, e.lineage_id, e.stage, e.kind, e.payload_hash, e.prev_hash, e.created_at) != e.entry_hash
+                or e.payload_hash != sha256_hex(e.payload)
+                or e.entry_hash != _entry_hash(e.seq, e.lineage_id, e.stage, e.kind, e.payload_hash, e.prev_hash, e.created_at)
             ):
                 return False, e.seq
             prev = e.entry_hash
-            count = e.seq
-            head_hash = e.entry_hash
 
-        # 1. Verify against explicit checkpoint argument if supplied
         if checkpoint is not None:
-            chk_seq = checkpoint.get("seq", 0)
-            chk_hash = checkpoint.get("head_hash", GENESIS)
-            chk_sig = checkpoint.get("signature", "")
-            if sec and chk_sig:
-                expected_sig = _sign_head(chk_seq, chk_hash, sec)
-                if not hmac.compare_digest(chk_sig, expected_sig):
-                    return False, None
-            if count != chk_seq or head_hash != chk_hash:
-                return False, count
+            seq, head_hash = int(checkpoint.get("seq", 0)), checkpoint.get("head_hash", GENESIS)
+            if not self._signed(seq, head_hash, checkpoint.get("signature", ""), sec) or not self._holds(seq, head_hash):
+                return False, seq
 
-        # 2. Verify against internal checkpoints table
-        chk_row = self._conn.execute("SELECT seq, head_hash, signature FROM checkpoints ORDER BY seq DESC LIMIT 1").fetchone()
-        if chk_row:
-            chk_seq, chk_hash, chk_sig = chk_row[0], chk_row[1], chk_row[2]
-            if sec and chk_sig:
-                expected_sig = _sign_head(chk_seq, chk_hash, sec)
-                if not hmac.compare_digest(chk_sig, expected_sig):
-                    return False, None
-            if count < chk_seq or (count == chk_seq and head_hash != chk_hash):
-                return False, count
-
+        if sec:
+            for seq, head_hash, sig in self._conn.execute("SELECT seq, head_hash, signature FROM checkpoints ORDER BY seq DESC"):
+                if self._signed(seq, head_hash, sig, sec):
+                    if not self._holds(seq, head_hash):
+                        return False, seq
+                    break
         return True, None
 
     @staticmethod
