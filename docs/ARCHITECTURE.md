@@ -6,7 +6,7 @@ How PactGuard AI is built and why. For what is live versus simulated, the evalua
 
 **Delegate → Discover → Negotiate → Govern → Settle and seal → Verify → Reconcile → Pay out → Defend → Learn**
 
-Disputes, returns and shipment tracking are described in depth in [DISPUTES.md](DISPUTES.md).
+Every feature is catalogued in [FEATURES.md](FEATURES.md); disputes, returns and shipment tracking are described in depth in [DISPUTES.md](DISPUTES.md).
 
 Each stage is one module in `backend/app/stages/` (`s01_delegate` … `s10_learn`), written as functions over the evidence ledger. `backend/app/runs.py` wraps them in run sessions that a UI can pause at a human-approval gate, and `backend/app/orchestrator.py` holds the runtime (ledger, gateways, budget accounting).
 
