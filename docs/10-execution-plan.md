@@ -442,7 +442,7 @@ No new layouts in this phase. Run doc 11's UI-4 tasks against the checklist in d
 
 **Phase 4 status (2026-11-06):**
 - [x] 4a Render files: `Dockerfile`, `render.yaml`, `FRONTEND_DIST` static serving, CORS from settings, single worker. Verified locally as one process. [ ] The service itself is not created yet (needs the Render account, B-7).
-- [ ] 4b APIMatic: not started and not claimed anywhere (needs the account, B-7). The README says so.
+- [x] 4b APIMatic (2026-11-12), scoped honestly: the Context Plugin was installed late and did not guide the code, so it is not claimed. What was done instead: `backend/scripts/apimatic_check.py` validates our Orders v2 create-order payloads (two purchase units, the saved-wallet payment source) against the models of APIMatic's generated `paypal-server-sdk` 2.4.0, with a negative control; result: 0 problems. Transaction Search query parameters were also checked against the SDK's list. The SDK has no Invoicing, Payouts or Disputes models, so those are unchecked. The README says exactly this.
 - [x] 4c Evaluation harness `backend/eval/` with `RESULTS.md`, also run as tests. It found paraphrased prompt injection slipping past the regex tripwire; the patterns were widened using the dev phrases only and the held-out catch rate (1 of 5) is reported as a known gap.
 - [x] 4d README rewritten for judges. [ ] Add the live URL after deploying.
 - [~] 4e UI polish sweep: largely done for the Command Center (formats, grouped tabs, hints, provenance chip, loading and error states, drawers, keyboard navigation). Not covered: the Mission Control screens, narrow-viewport checks and dark mode.
