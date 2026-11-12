@@ -98,6 +98,23 @@ export type LedgerEntry = {
   created_at: string
 }
 export type LedgerView = { chain_ok: boolean; first_bad_seq: number | null; entries: LedgerEntry[] }
+
+export type DemoRunResult = {
+  timeline: Array<{ stage: string; event: string; at?: string; [key: string]: unknown }>
+  rows: StudioRow[]
+  kpis: {
+    total_spend?: string
+    savings_vs_baseline?: string
+    firewall_blocked_count?: number
+    disputes_won_pct?: string
+    [key: string]: unknown
+  }
+  calibration: {
+    changes: string[]
+    trust: Record<string, number>
+    lineage_id: string
+  }
+}
 // One row per purchase lineage from GET /api/studio/rows. Money arrives as decimal strings.
 export type StudioRow = {
   lineage_id: string
@@ -300,7 +317,7 @@ export const api = {
     call<{ event_id: string; duplicate: boolean; lineage_id?: string }>('POST', '/webhooks/simulate', body),
   replayWebhook: (eventId: string) => call<Record<string, unknown>>('POST', `/webhooks/${encodeURIComponent(eventId)}/replay`),
   aiConfig: () => call<{ configured: boolean; model: string }>('GET', '/ai/config'),
-  demoRun: () => call<unknown>('POST', '/demo/run'),
+  demoRun: () => call<DemoRunResult>('POST', '/demo/run'),
   disputes: () => call<DisputeSummary[]>('GET', '/disputes'),
   dispute: (id: string) => call<DisputeDetail>('GET', `/disputes/${id}`),
   draftDispute: (id: string, option: string) => call<{ text: string; source: string }>('POST', `/disputes/${id}/draft`, { option }),

@@ -1,0 +1,22 @@
+name: Keep Render Service Warm
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render free tier spin-down
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping PactGuard Health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Hosted Health Endpoint
+        run: |
+          response=$(curl -s -w "%{http_code}" -o /tmp/health.json https://pactguard-ai.onrender.com/api/health)
+          echo "Status: $response"
+          cat /tmp/health.json
+          if [ "$response" -ne 200 ]; then
+            echo "Non-200 response from health endpoint"
+            exit 1
+          fi
