@@ -6,6 +6,8 @@ How PactGuard AI is built and why. For what is live versus simulated, the evalua
 
 **Delegate → Discover → Negotiate → Govern → Settle and seal → Verify → Reconcile → Pay out → Defend → Learn**
 
+Disputes, returns and shipment tracking are described in depth in [DISPUTES.md](DISPUTES.md).
+
 Each stage is one module in `backend/app/stages/` (`s01_delegate` … `s10_learn`), written as functions over the evidence ledger. `backend/app/runs.py` wraps them in run sessions that a UI can pause at a human-approval gate, and `backend/app/orchestrator.py` holds the runtime (ledger, gateways, budget accounting).
 
 Money decisions are deterministic. The only LLM in the system drafts language (dispute responses, the Studio assistant); anything it returns passes the same schema gate as seller text would.
@@ -103,7 +105,7 @@ frontend/src/
 | Firewall demo | `POST /api/runs/{id}/attack`, `POST /api/demo/run` (the whole loop in about a second) |
 | Ledger | `GET /api/ledger`, `/ledger/verify`, `/ledger/checkpoint` |
 | Studio | `GET /api/studio/rows`, `/lineage/{id}`, `/paypal`, `/reconciliation`, `/calibrations`, `/history/verify` |
-| Disputes | `GET /api/disputes`, `/disputes/{id}`, `/brief.pdf`; `POST /draft`, `/respond`, `/simulate-resolve`, `/return-received` |
+| Disputes and shipments | `GET /api/disputes`, `/disputes/{id}`, `/brief.pdf`; `POST /draft`, `/respond`, `/return-received`, `/api/deliveries`; replay only: `/runs/{id}/disputes/simulate`, `/simulate-return`, `/simulate-resolve` (see [DISPUTES.md](DISPUTES.md)) |
 | Webhooks | `POST /api/webhooks/paypal`, `GET /api/webhooks`, `POST /api/webhooks/{event}/replay` |
 | Assistant | `GET /api/ai/config`, `POST /api/ai/messages` |
 | Health | `GET /api/health` (mode, whether a sandbox run is offered) |

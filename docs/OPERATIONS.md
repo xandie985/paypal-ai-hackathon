@@ -59,12 +59,17 @@ Set `ALLOW_SANDBOX_RUNS=true`, the PayPal client id and secret, and `PAYPAL_VAUL
 
 Guards: off by default; a run's budget is capped (`SANDBOX_RUN_BUDGET_CAP`, 2500 USD); 3 runs an hour per visitor and `SANDBOX_RUNS_PER_HOUR` overall; the vault id never reaches the browser or the ledger. It is test money but it is your sandbox, so leave it off on a public deployment unless you want visitors spending it. Payout stays scripted in a sandbox run. On a replay deployment the Command Center reads the fixed PayPal fixture, so a sandbox run's captures appear on the Reconciliation page as **Sandbox capture** (real, but not matchable there); check them in the sandbox account's Activity, or run live to see them matched.
 
+## Disputes and returns
+
+The desk works against whichever PayPal the server is in. On the **live sandbox**, the buyer opens a dispute in the sandbox Resolution Center and it appears in the desk within about 10 seconds. Set `RETURN_ADDRESS_*` to a real returns address first: live mode refuses a refund-on-return offer without one, and PayPal shows it to the buyer. In **replay** (the public demo) the desk simulates the buyer's dispute, return and PayPal's decision. `python scripts/live_dispute_probe.py list` and `offer <id> <amount> [--send]` test PayPal's offer API outside the desk (a dry run unless `--send`). Full workflow, rules and what has been verified live: [DISPUTES.md](DISPUTES.md).
+
 ## Verifying a deployment
 
 1. `GET /api/health` returns `status: ok`, the mode and whether a sandbox run is offered.
 2. Press **Run agent**, approve the held purchase, run the post-purchase checks, simulate the attack and check the ledger says "chain verified".
-3. Open **Command Center**: seven pages render and the Live chip is green.
-4. `GET /api/ledger/verify` returns `chain_ok: true`; `GET /api/studio/history/verify` verifies the seeded history.
+3. In the **Dispute desk**, simulate a dispute on a settled purchase and open it: facts, options and the recommendation should show.
+4. Open **Command Center**: seven pages render and the Live chip is green.
+5. `GET /api/ledger/verify` returns `chain_ok: true`; `GET /api/studio/history/verify` verifies the seeded history.
 
 ## Known quirks
 
