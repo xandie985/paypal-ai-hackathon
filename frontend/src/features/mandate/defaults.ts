@@ -31,3 +31,4 @@ export const PRESET_STRICT: MandateInput = {
   min_return_days: 30,
   mode: 'review_first',
 }
+
